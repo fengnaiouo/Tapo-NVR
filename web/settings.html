@@ -228,9 +228,10 @@
       </div>
       <details>
         <summary>攝影機控制與雙向語音（選填）</summary>
-        <label>TP-Link 雲端帳號密碼
+        <label>TP-Link 帳號的密碼
           <input name="cloud_password" type="password" autocomplete="off" placeholder="不使用請留空">
-          <small>隱私模式、夜視、偵測靈敏度、移動追蹤、SD 卡狀態與對講，都需透過 Tapo 私有協定，使用你登入 Tapo App 的 TP-Link 帳號密碼（攝影機擁有者的帳號）。</small>
+          <small>只需要填密碼：就是你登入 Tapo App 的 TP-Link 帳號（攝影機擁有者）的密碼。攝影機本機登入的帳號固定為 admin，不需要填 Email。</small>
+          <small>用途：隱私模式、夜視、偵測靈敏度、移動追蹤、SD 卡狀態與對講（Tapo 私有協定）。這和上方「攝影機帳戶」是不同的帳密。</small>
           <small>⚠️ 攝影機約允許 10 次登入失敗，超過會暫時鎖定；密碼錯誤時本程式會停止重試，修正密碼後才會再登入。</small>
         </label>
         <label class="check"><input name="clear_cloud_password" type="checkbox"> 移除已儲存的雲端密碼</label>
