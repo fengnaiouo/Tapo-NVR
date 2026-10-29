@@ -40,6 +40,24 @@ function streamMode() {
   return isPrivateHost(location.hostname) ? 'webrtc,mse' : 'mse';
 }
 
+// ---------- 畫質 ----------
+// 格狀畫面：sd（子串流，預設）/ hd（主串流）；放大檢視：auto / hd / sd，皆記在此裝置
+function gridQuality() {
+  return localStorage.getItem('gridQuality') === 'hd' ? 'hd' : 'sd';
+}
+function focusQuality() {
+  const pref = localStorage.getItem('focusQuality') || 'auto';
+  if (pref === 'hd' || pref === 'sd') return pref;
+  // 自動：區網用 2K 主串流；外網（例如 Cloudflare Tunnel）用子串流較流暢
+  return isPrivateHost(location.hostname) ? 'hd' : 'sd';
+}
+function streamFor(cam, quality) {
+  return quality === 'hd' ? cam.main_stream : cam.sub_stream;
+}
+function qualityLabel(q) {
+  return q === 'hd' ? 'HD' : 'SD';
+}
+
 function createPlayer(stream) {
   const v = document.createElement('tapo-video');
   v.mode = streamMode();
@@ -100,8 +118,10 @@ function renderGrid() {
     tile.querySelector('.name').textContent = cam.name;
     tile.querySelector('.name').setAttribute('data-no-i18n', '');
     applyRecording(tile, cam.recording);
-    const player = createPlayer(cam.sub_stream);
-    player.addEventListener('streammode', (e) => tile.querySelector('.mode').textContent = e.detail);
+    const gq = gridQuality();
+    const player = createPlayer(streamFor(cam, gq));
+    tile.querySelector('.mode').textContent = qualityLabel(gq);
+    player.addEventListener('streammode', (e) => tile.querySelector('.mode').textContent = `${e.detail} · ${qualityLabel(gq)}`);
     tile.querySelector('.viewport').appendChild(player);
     tile.querySelector('.viewport').addEventListener('dblclick', () => openFocus(cam));
     tile.querySelector('[data-act=focus]').onclick = () => openFocus(cam);
@@ -316,8 +336,10 @@ function openFocus(cam) {
   state.focus = cam;
   $('#focus-name').textContent = cam.name;
   const vp = $('#focus-viewport');
-  const player = createPlayer(cam.main_stream);
-  player.addEventListener('streammode', (e) => $('#focus-mode').textContent = e.detail);
+  const fq = focusQuality();
+  const player = createPlayer(streamFor(cam, fq));
+  $('#focus-mode').textContent = qualityLabel(fq);
+  player.addEventListener('streammode', (e) => $('#focus-mode').textContent = `${e.detail} · ${qualityLabel(fq)}`);
   vp.appendChild(player);
   zoom.el = player;
   setZoom(1, 0, 0);
@@ -329,6 +351,19 @@ function openFocus(cam) {
   if (cam.controls) loadDevice(cam);
   $('#focus').hidden = false;
   if (cam.ptz) loadPresets();
+}
+
+function switchFocusStream() {
+  const cam = state.focus;
+  if (!cam || !zoom.el) return;
+  const fq = focusQuality();
+  const player = createPlayer(streamFor(cam, fq));
+  $('#focus-mode').textContent = qualityLabel(fq);
+  player.addEventListener('streammode', (e) => $('#focus-mode').textContent = `${e.detail} · ${qualityLabel(fq)}`);
+  zoom.el.replaceWith(player);
+  zoom.el = player;
+  setZoom(zoom.scale, zoom.x, zoom.y);
+  applyAudio();
 }
 
 function closeFocus() {
@@ -761,6 +796,17 @@ async function main() {
   await reloadCameras();
   $('#event-filter').onchange = applyEventFilter;
 
+  $('#grid-quality').value = gridQuality();
+  $('#grid-quality').onchange = (e) => {
+    localStorage.setItem('gridQuality', e.target.value);
+    renderGrid();
+  };
+  $('#focus-quality').value = localStorage.getItem('focusQuality') || 'auto';
+  $('#focus-quality').onchange = (e) => {
+    localStorage.setItem('focusQuality', e.target.value);
+    // 只重新連線影像，保留目前的變焦與面板狀態
+    if (state.focus) switchFocusStream();
+  };
   $('#stream-mode').value = localStorage.getItem('streamMode') || 'auto';
   $('#stream-mode').onchange = (e) => {
     localStorage.setItem('streamMode', e.target.value);

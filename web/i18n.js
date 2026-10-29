@@ -443,7 +443,17 @@
     "音量": "Volume",
     "靜音": "Muted",
     "靜音 / 取消靜音（M）": "Mute / unmute (M)",
-    "音量（滑鼠滾輪可調整）": "Volume (mouse wheel adjusts)"
+    "音量（滑鼠滾輪可調整）": "Volume (mouse wheel adjusts)",
+    "畫質": "Quality",
+    "格狀畫面畫質": "Grid quality",
+    "放大畫面畫質": "Zoomed view quality",
+    "標準畫質": "Standard quality",
+    "高畫質": "High quality",
+    "自動（區網高畫質、外網標準）": "Auto (HD on LAN, SD over the internet)",
+    "高畫質（2K 主串流）": "High (2K main stream)",
+    "標準（子串流，省頻寬）": "Standard (sub stream, saves bandwidth)",
+    "標準（子串流，省頻寬，建議）": "Standard (sub stream, saves bandwidth, recommended)",
+    "高畫質（2K 主串流，較耗網路與效能）": "High (2K main stream, uses more bandwidth and CPU)"
   }/*END*/;
 
   const LOCALES = {'zh-TW': 'zh-TW', 'zh-CN': 'zh-CN', en: 'en-US'};

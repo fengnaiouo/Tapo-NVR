@@ -505,6 +505,8 @@ const device = $('#form-device');
 device.elements.streamMode.value = localStorage.getItem('streamMode') || 'auto';
 device.elements.lang.value = i18n.pref;
 device.elements.layout.value = localStorage.getItem('layout') || 'auto';
+device.elements.gridQuality.value = localStorage.getItem('gridQuality') === 'hd' ? 'hd' : 'sd';
+device.elements.focusQuality.value = localStorage.getItem('focusQuality') || 'auto';
 device.addEventListener('change', (e) => {
   if (e.target.name === 'lang') return i18n.setLang(e.target.value);
   localStorage.setItem(e.target.name, e.target.value);
