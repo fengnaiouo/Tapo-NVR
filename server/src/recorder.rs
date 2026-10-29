@@ -149,8 +149,7 @@ async fn run(state: AppState, key: RecKey, cancel: CancellationToken) {
             .stdout(Stdio::null())
             .stderr(Stdio::piped())
             .kill_on_drop(true);
-        #[cfg(windows)]
-        cmd.creation_flags(0x0800_0000);
+        crate::harden_child(&mut cmd);
 
         let mut child = match cmd.spawn() {
             Ok(c) => c,

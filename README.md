@@ -57,6 +57,36 @@ Settings are stored in `data\tapo-nvr.db`; a legacy `config.toml` in the working
 
 **Forgot the admin password?** Desktop app: tray icon → **App preferences** → **Forgot the admin password?**. Standalone server: stop it, then run `tapo-nvr reset-password --data data`.
 
+### 2c. Linux
+
+Download from [Releases](https://github.com/fengnaiouo/Tapo-NVR/releases/latest):
+
+| Package | For | Install |
+|---|---|---|
+| `tapo-nvr-X.Y.Z-linux-x86_64.tar.gz` / `-linux-aarch64.tar.gz` | Servers, mini PCs, Raspberry Pi (64-bit) | `tar xzf tapo-nvr-*.tar.gz && cd tapo-nvr-*/ && sudo ./install.sh` — installs to `/opt/tapo-nvr`, data in `/var/lib/tapo-nvr`, systemd service enabled |
+| Docker `ghcr.io/fengnaiouo/tapo-nvr` | NAS (Synology, Unraid, TrueNAS), any Docker host (amd64 / arm64) | see below |
+| `Tapo-NVR_X.Y.Z_amd64.AppImage` / `.deb` | Linux desktop (with tray icon) | AppImage: `chmod +x` and run (auto-updates); deb: `sudo apt install ./Tapo-NVR_*.deb` |
+
+**Docker** (`docker/docker-compose.yml`):
+
+```yaml
+services:
+  tapo-nvr:
+    image: ghcr.io/fengnaiouo/tapo-nvr:latest
+    restart: unless-stopped
+    network_mode: host        # needed for camera discovery and WebRTC
+    environment:
+      - TZ=Asia/Taipei
+    volumes:
+      - ./data:/data
+      - ./recordings:/recordings   # set the recording folder to /recordings in Settings
+```
+
+Notes for Linux:
+- Camera passwords are encrypted with a key file (`secret.key`, mode 600) in the data folder instead of Windows DPAPI — protect the data folder.
+- The `tapo-nvr` service user must be able to write to the recording folder, e.g. `sudo chown tapo-nvr:tapo-nvr /srv/recordings`.
+- On some distributions the desktop app's embedded browser has no WebRTC; it falls back to MSE automatically (slightly higher latency).
+
 ### Viewing from other devices
 
 On the same LAN, open `http://<IP of the PC running Tapo NVR>:8080` in any browser.

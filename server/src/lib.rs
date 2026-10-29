@@ -259,22 +259,16 @@ impl Server {
         }
         i18n::set_default(&cfg.notify.language);
         let base = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-        let go2rtc_bin = opts.go2rtc_bin.clone().unwrap_or_else(|| {
-            let p = resolve(&base, &cfg.go2rtc.binary);
-            if p.exists() {
-                return p;
-            }
-            // 獨立執行時也找執行檔旁邊的 bin 資料夾
-            std::env::current_exe()
-                .ok()
-                .and_then(|e| e.parent().map(|d| d.join(&cfg.go2rtc.binary)))
-                .filter(|p| p.exists())
-                .unwrap_or(p)
-        });
+        let go2rtc_bin = opts.go2rtc_bin.clone().unwrap_or_else(|| locate_tool(&base, &cfg.go2rtc.binary, "go2rtc"));
         let ffmpeg_bin = opts.ffmpeg_bin.clone().unwrap_or_else(|| {
-            let local = go2rtc_bin.with_file_name("ffmpeg.exe");
-            if local.exists() { local } else { PathBuf::from("ffmpeg") }
+            let local = go2rtc_bin.with_file_name(format!("ffmpeg{}", std::env::consts::EXE_SUFFIX));
+            if local.is_file() {
+                local
+            } else {
+                find_in_path("ffmpeg").unwrap_or_else(|| PathBuf::from("ffmpeg"))
+            }
         });
+        tracing::info!("go2rtc：{}；ffmpeg：{}", go2rtc_bin.display(), ffmpeg_bin.display());
         let web_dir = cfg.server.web_dir.as_ref().map(|d| resolve(&base, d));
 
         let state = AppState(Arc::new(Inner {
@@ -613,9 +607,63 @@ pub fn free_space(path: &Path) -> Option<u64> {
         };
         (ok != 0).then_some(free)
     }
-    #[cfg(not(windows))]
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        let c = std::ffi::CString::new(path.as_os_str().as_bytes()).ok()?;
+        let mut st: libc::statvfs = unsafe { std::mem::zeroed() };
+        let ok = unsafe { libc::statvfs(c.as_ptr(), &mut st) } == 0;
+        ok.then(|| st.f_bavail as u64 * st.f_frsize as u64)
+    }
+    #[cfg(not(any(windows, unix)))]
     {
         let _ = path;
         None
     }
+}
+
+/// 子程序（go2rtc、ffmpeg）的平台設定：Windows 不開新視窗；Linux 在本程式結束時一併終止
+pub fn harden_child(cmd: &mut tokio::process::Command) {
+    #[cfg(windows)]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    #[cfg(target_os = "linux")]
+    unsafe {
+        cmd.pre_exec(|| {
+            // 父程序結束（包含當機、被 kill）時，核心送 SIGKILL 給子程序
+            libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL);
+            Ok(())
+        });
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
+    let _ = cmd;
+}
+
+/// 在 PATH 中尋找執行檔
+fn find_in_path(name: &str) -> Option<PathBuf> {
+    let file = format!("{name}{}", std::env::consts::EXE_SUFFIX);
+    std::env::var_os("PATH")
+        .map(|p| std::env::split_paths(&p).map(|d| d.join(&file)).collect::<Vec<_>>())
+        .unwrap_or_default()
+        .into_iter()
+        .find(|p| p.is_file())
+}
+
+/// 附屬程式（go2rtc / ffmpeg）的位置：設定的路徑 → 執行檔旁的 bin/ 與同資料夾 → PATH
+fn locate_tool(base: &Path, configured: &Path, name: &str) -> PathBuf {
+    let exe_name = format!("{name}{}", std::env::consts::EXE_SUFFIX);
+    let mut candidates = vec![resolve(base, configured)];
+    if let Some(dir) = std::env::current_exe().ok().and_then(|e| e.parent().map(Path::to_path_buf)) {
+        candidates.push(dir.join(configured));
+        candidates.push(dir.join("bin").join(&exe_name));
+        candidates.push(dir.join(&exe_name));
+    }
+    candidates
+        .iter()
+        .find(|p| p.is_file())
+        .cloned()
+        .or_else(|| find_in_path(name))
+        .unwrap_or_else(|| candidates[0].clone())
 }

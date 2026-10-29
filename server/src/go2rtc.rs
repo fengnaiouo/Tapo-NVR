@@ -132,11 +132,7 @@ pub async fn supervise(state: AppState) {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .kill_on_drop(true);
-        #[cfg(windows)]
-        {
-            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-            cmd.creation_flags(CREATE_NO_WINDOW);
-        }
+        crate::harden_child(&mut cmd);
         match cmd.spawn() {
             Ok(mut child) => {
                 tracing::info!("go2rtc 已啟動 (pid {:?})", child.id());

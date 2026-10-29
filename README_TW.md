@@ -57,6 +57,36 @@
 
 **忘記管理員密碼？** 桌面版：系統匣圖示 →「應用程式偏好設定」→「忘記管理員密碼？」。獨立伺服器：先停止伺服器，再執行 `tapo-nvr reset-password --data data`。
 
+### 2c. Linux
+
+從 [Releases](https://github.com/fengnaiouo/Tapo-NVR/releases/latest) 下載：
+
+| 檔案 | 適用 | 安裝方式 |
+|---|---|---|
+| `tapo-nvr-X.Y.Z-linux-x86_64.tar.gz`／`-linux-aarch64.tar.gz` | 伺服器、小主機、樹莓派（64 位元） | `tar xzf tapo-nvr-*.tar.gz && cd tapo-nvr-*/ && sudo ./install.sh`：安裝到 `/opt/tapo-nvr`，資料放在 `/var/lib/tapo-nvr`，並建立開機自動啟動的 systemd 服務 |
+| Docker `ghcr.io/fengnaiouo/tapo-nvr` | NAS（Synology、Unraid、TrueNAS）或任何 Docker 主機（amd64／arm64） | 見下方 |
+| `Tapo-NVR_X.Y.Z_amd64.AppImage`／`.deb` | Linux 桌面（有系統匣圖示） | AppImage：`chmod +x` 後直接執行（支援自動更新）；deb：`sudo apt install ./Tapo-NVR_*.deb` |
+
+**Docker**（`docker/docker-compose.yml`）：
+
+```yaml
+services:
+  tapo-nvr:
+    image: ghcr.io/fengnaiouo/tapo-nvr:latest
+    restart: unless-stopped
+    network_mode: host        # 掃描攝影機與 WebRTC 需要
+    environment:
+      - TZ=Asia/Taipei
+    volumes:
+      - ./data:/data
+      - ./recordings:/recordings   # 在「設定 → 錄影」把錄影資料夾設為 /recordings
+```
+
+Linux 注意事項：
+- 攝影機密碼改用資料夾內的金鑰檔（`secret.key`，權限 600）加密，而不是 Windows DPAPI，請保護好資料夾。
+- `tapo-nvr` 服務帳號需要能寫入錄影資料夾，例如 `sudo chown tapo-nvr:tapo-nvr /srv/recordings`。
+- 部分發行版的桌面版內嵌瀏覽器不支援 WebRTC，會自動改用 MSE（延遲稍高）。
+
 ### 其他裝置觀看
 
 同一個區網的手機或電腦，用瀏覽器開啟 `http://<執行 Tapo NVR 的電腦 IP>:8080`。

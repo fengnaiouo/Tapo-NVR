@@ -85,23 +85,48 @@ struct AppState {
 ///   webview\  內嵌瀏覽器的資料
 ///   cache\    暫存（遠端模式的通知截圖）
 /// 安裝資料夾無法寫入時（例如裝在 C:\Program Files）改用 %APPDATA%\com.tapo-nvr.desktop。
+/// Linux / macOS 一律使用使用者資料夾（AppImage 的安裝位置是唯讀的，/usr/bin 與 .app 也不該寫入）：
+///   Linux：$XDG_DATA_HOME/tapo-nvr（預設 ~/.local/share/tapo-nvr）
+///   macOS：~/Library/Application Support/Tapo NVR
 fn app_root() -> &'static PathBuf {
     static ROOT: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
     ROOT.get_or_init(|| {
-        if let Some(dir) = std::env::current_exe().ok().and_then(|e| e.parent().map(PathBuf::from)) {
-            let probe = dir.join("data");
-            let writable = std::fs::create_dir_all(&probe).is_ok() && {
-                let f = probe.join(".write-test");
-                let ok = std::fs::write(&f, b"ok").is_ok();
-                let _ = std::fs::remove_file(&f);
-                ok
-            };
-            if writable {
-                return dir;
+        #[cfg(windows)]
+        {
+            if let Some(dir) = std::env::current_exe().ok().and_then(|e| e.parent().map(PathBuf::from)) {
+                let probe = dir.join("data");
+                let writable = std::fs::create_dir_all(&probe).is_ok() && {
+                    let f = probe.join(".write-test");
+                    let ok = std::fs::write(&f, b"ok").is_ok();
+                    let _ = std::fs::remove_file(&f);
+                    ok
+                };
+                if writable {
+                    return dir;
+                }
             }
+            legacy_appdata_dir().unwrap_or_else(|| PathBuf::from("."))
         }
-        legacy_appdata_dir().unwrap_or_else(|| PathBuf::from("."))
+        #[cfg(not(windows))]
+        {
+            user_data_dir()
+        }
     })
+}
+
+#[cfg(not(windows))]
+fn user_data_dir() -> PathBuf {
+    let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
+    #[cfg(target_os = "macos")]
+    let dir = home.join("Library").join("Application Support").join("Tapo NVR");
+    #[cfg(not(target_os = "macos"))]
+    let dir = std::env::var_os("XDG_DATA_HOME")
+        .map(PathBuf::from)
+        .filter(|p| p.is_absolute())
+        .unwrap_or_else(|| home.join(".local").join("share"))
+        .join("tapo-nvr");
+    let _ = std::fs::create_dir_all(&dir);
+    dir
 }
 
 /// 0.4.3 以前存放資料的位置
@@ -132,6 +157,10 @@ fn log_dir() -> PathBuf {
 
 /// 舊版（資料在 AppData）升級：把資料搬到安裝資料夾，只在新位置還沒有資料庫時執行一次
 fn migrate_from_appdata() {
+    // 只有 Windows 版曾經把資料放在 AppData
+    if !cfg!(windows) {
+        return;
+    }
     // 開發中（從 target 資料夾執行）不搬移，避免把正式安裝的資料搬進編譯資料夾
     let dev = std::env::current_exe()
         .map(|p| p.to_string_lossy().to_lowercase().contains("\\target\\"))
@@ -256,8 +285,20 @@ fn effective_update_url(p: &Prefs) -> String {
     if p.update_url.trim().is_empty() { DEFAULT_UPDATE_URL.to_string() } else { p.update_url.trim().to_string() }
 }
 
+/// 用系統預設程式開啟資料夾或網址
 fn open_external(target: &str) {
-    let _ = std::process::Command::new("explorer").arg(target).spawn();
+    #[cfg(windows)]
+    let program = "explorer";
+    #[cfg(target_os = "macos")]
+    let program = "open";
+    #[cfg(not(any(windows, target_os = "macos")))]
+    let program = "xdg-open";
+    let _ = std::process::Command::new(program).arg(target).spawn();
+}
+
+/// 附帶程式的檔名（Windows 加 .exe）
+fn tool_name(name: &str) -> String {
+    format!("{name}{}", std::env::consts::EXE_SUFFIX)
 }
 
 fn http() -> reqwest::Client {
@@ -303,7 +344,7 @@ async fn stop_local(app: &AppHandle) {
 
 async fn run_local(app: AppHandle) {
     loop {
-        let go2rtc = bundled(&app, "go2rtc.exe");
+        let go2rtc = bundled(&app, &tool_name("go2rtc"));
         if go2rtc.is_none() {
             show_error(&app, &tr!("找不到內附的 go2rtc.exe，請重新安裝 Tapo NVR。", "The bundled go2rtc.exe is missing. Please reinstall Tapo NVR."));
             return;
@@ -313,7 +354,7 @@ async fn run_local(app: AppHandle) {
             // 0.2.x 版的設定檔：第一次啟動時自動匯入資料庫並清除其中的密碼
             legacy_config: Some(data_dir(&app).join("config.toml")),
             go2rtc_bin: go2rtc,
-            ffmpeg_bin: bundled(&app, "ffmpeg.exe"),
+            ffmpeg_bin: bundled(&app, &tool_name("ffmpeg")),
             can_restart: true,
             desktop_embedded: true,
         };

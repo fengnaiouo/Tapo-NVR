@@ -1,0 +1,9 @@
+{
+  "bundle": {
+    "targets": ["nsis"],
+    "resources": {
+      "../../bin/go2rtc.exe": "go2rtc.exe",
+      "../../bin/ffmpeg.exe": "ffmpeg.exe"
+    }
+  }
+}

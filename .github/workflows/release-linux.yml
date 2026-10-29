@@ -1,0 +1,181 @@
+name: Release (Linux)
+
+# 在 Windows 上發布 Release（含 Windows 安裝檔與 latest.json）後自動執行：
+# 編譯 Linux 伺服器（x86_64 / arm64）、Docker 映像檔、桌面版（AppImage / deb），並附加到同一個 Release。
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v0.6.0)"
+        required: true
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  TAG: ${{ github.event.release.tag_name || inputs.tag }}
+
+jobs:
+  server:
+    name: Server (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Ubuntu 22.04（glibc 2.35）編譯，可在 Debian 12、Raspberry Pi OS、Ubuntu 22.04 以後執行
+          - { arch: x86_64, docker: amd64, go2rtc: amd64, runner: ubuntu-22.04 }
+          - { arch: aarch64, docker: arm64, go2rtc: arm64, runner: ubuntu-22.04-arm }
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: server-${{ matrix.arch }}
+
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libssl-dev
+
+      - name: Build
+        run: cargo build --release -p tapo-nvr --locked
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          VER="${TAG#v}"
+          NAME="tapo-nvr-${VER}-linux-${{ matrix.arch }}"
+          mkdir -p "pkg/$NAME/bin" "dist/linux-${{ matrix.docker }}"
+          curl -fsSL -o "pkg/$NAME/bin/go2rtc" "https://github.com/AlexxIT/go2rtc/releases/latest/download/go2rtc_linux_${{ matrix.go2rtc }}"
+          chmod +x "pkg/$NAME/bin/go2rtc"
+          cp target/release/tapo-nvr "pkg/$NAME/"
+          cp scripts/linux/install.sh scripts/linux/uninstall.sh scripts/linux/tapo-nvr.service LICENSE THIRD_PARTY_NOTICES.md README.md "pkg/$NAME/"
+          chmod +x "pkg/$NAME/install.sh" "pkg/$NAME/uninstall.sh"
+          tar -C pkg -czf "$NAME.tar.gz" "$NAME"
+          cp target/release/tapo-nvr "pkg/$NAME/bin/go2rtc" "dist/linux-${{ matrix.docker }}/"
+          echo "ASSET=$NAME.tar.gz" >> "$GITHUB_ENV"
+
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" "$ASSET" --clobber
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: docker-${{ matrix.docker }}
+          path: dist/linux-${{ matrix.docker }}
+
+  docker:
+    name: Docker image
+    needs: server
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: docker-amd64
+          path: dist/linux-amd64
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: docker-arm64
+          path: dist/linux-arm64
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Image tags
+        run: |
+          echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/tapo-nvr" >> "$GITHUB_ENV"
+          echo "VER=${TAG#v}" >> "$GITHUB_ENV"
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ env.VER }}
+            ${{ env.IMAGE }}:latest
+
+  desktop:
+    name: Desktop (AppImage / deb)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: desktop-linux
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev patchelf file jq
+
+      - name: Bundled go2rtc and ffmpeg
+        run: |
+          set -euo pipefail
+          mkdir -p bin
+          curl -fsSL -o bin/go2rtc https://github.com/AlexxIT/go2rtc/releases/latest/download/go2rtc_linux_amd64
+          curl -fsSL -o ffmpeg.tar.xz https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz
+          tar -xJf ffmpeg.tar.xz --wildcards --strip-components=2 -C bin '*/bin/ffmpeg'
+          chmod +x bin/go2rtc bin/ffmpeg
+          bin/ffmpeg -hide_banner -version | head -1
+
+      - name: Build
+        working-directory: desktop/src-tauri
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPIMAGE_EXTRACT_AND_RUN: 1
+        run: npx --yes @tauri-apps/cli@2 build --bundles deb,appimage
+
+      - name: Upload to release and update latest.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VER="${TAG#v}"
+          B=target/release/bundle
+          APP="$(ls $B/appimage/*.AppImage | head -1)"
+          DEB="$(ls $B/deb/*.deb | head -1)"
+          # GitHub 會把檔名中的空白改成「.」，先改成不含空白的名稱
+          APP_NAME="Tapo-NVR_${VER}_amd64.AppImage"
+          DEB_NAME="Tapo-NVR_${VER}_amd64.deb"
+          cp "$APP" "$APP_NAME"
+          cp "$DEB" "$DEB_NAME"
+          gh release upload "$TAG" "$APP_NAME" "$DEB_NAME" --clobber
+          # Linux 桌面版自動更新：把 AppImage 加入同一份 latest.json
+          SIG="$(cat "$APP.sig")"
+          URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${APP_NAME}"
+          gh release download "$TAG" -p latest.json -O latest.json --clobber
+          jq --arg sig "$SIG" --arg url "$URL" '.platforms["linux-x86_64"] = {signature: $sig, url: $url}' latest.json > latest.new.json
+          mv latest.new.json latest.json
+          gh release upload "$TAG" latest.json --clobber
+          jq '.platforms | keys' latest.json

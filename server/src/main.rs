@@ -7,7 +7,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 
 fn usage() -> ! {
     eprintln!(
-        "用法 / Usage:\n  tapo-nvr [--data data] [--import config.toml]   啟動伺服器 / start the server\n  tapo-nvr check [--data data]                    測試攝影機 / test cameras\n  tapo-nvr reset-password [--data data]           重設管理員密碼 / reset the admin password\n\n設定存在 data/tapo-nvr.db（機密以 Windows DPAPI 加密）。目前資料夾若有舊版 config.toml 會自動匯入。\n桌面版的資料夾：%APPDATA%\\com.tapo-nvr.desktop\\data"
+        "用法 / Usage:\n  tapo-nvr [--data data] [--import config.toml]   啟動伺服器 / start the server\n  tapo-nvr check [--data data]                    測試攝影機 / test cameras\n  tapo-nvr reset-password [--data data]           重設管理員密碼 / reset the admin password\n\n設定存在 <資料夾>/tapo-nvr.db（Windows 以 DPAPI 加密機密；Linux 以資料夾內權限 600 的金鑰檔加密）。\nSettings are stored in <data>/tapo-nvr.db. go2rtc / ffmpeg are looked up next to the executable (bin/) and in PATH."
     );
     std::process::exit(2);
 }

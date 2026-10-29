@@ -4806,6 +4806,7 @@ dependencies = [
  "hkdf",
  "hmac",
  "if-addrs",
+ "libc",
  "md5",
  "mime_guess",
  "num-bigint",
@@ -4838,6 +4839,7 @@ version = "0.5.0"
 dependencies = [
  "chrono",
  "futures-util",
+ "notify-rust",
  "reqwest 0.12.28",
  "serde",
  "serde_json",

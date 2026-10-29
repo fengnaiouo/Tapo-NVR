@@ -1,0 +1,17 @@
+{
+  "bundle": {
+    "targets": ["deb", "appimage"],
+    "resources": {
+      "../../bin/go2rtc": "go2rtc",
+      "../../bin/ffmpeg": "ffmpeg"
+    },
+    "linux": {
+      "deb": {
+        "section": "video"
+      },
+      "appimage": {
+        "bundleMediaFramework": false
+      }
+    }
+  }
+}

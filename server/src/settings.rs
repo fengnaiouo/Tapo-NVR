@@ -734,8 +734,14 @@ pub async fn browse(Query(q): Query<BrowseQuery>) -> ApiResult {
             .map(|d| format!("{}:\\", d as char))
             .filter(|d| std::path::Path::new(d).exists())
             .collect();
+        // Linux / macOS：根目錄，加上家目錄與外接硬碟常見的掛載點
         #[cfg(not(windows))]
-        let roots = vec!["/".to_string()];
+        let roots: Vec<String> = ["/".to_string()]
+            .into_iter()
+            .chain(std::env::var("HOME").ok())
+            .chain(["/mnt", "/media", "/srv", "/var/lib/tapo-nvr", "/recordings", "/Volumes"].iter().map(|s| s.to_string()))
+            .filter(|d| std::path::Path::new(d).is_dir())
+            .collect();
         let drives: Vec<Value> = roots
             .into_iter()
             .map(|d| json!({"name": d, "path": d, "free_bytes": crate::free_space(std::path::Path::new(&d))}))

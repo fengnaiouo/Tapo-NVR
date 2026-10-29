@@ -1,0 +1,16 @@
+# Tapo NVR（Docker）
+#   docker compose up -d
+# 然後用瀏覽器開啟 http://<這台主機的 IP>:8080，在區網內建立管理員帳號。
+# 到「設定 → 錄影」把錄影資料夾設為 /recordings。
+services:
+  tapo-nvr:
+    image: ghcr.io/fengnaiouo/tapo-nvr:latest
+    container_name: tapo-nvr
+    restart: unless-stopped
+    # host 網路：掃描區網攝影機（多播 / 廣播）與 WebRTC 低延遲串流都需要
+    network_mode: host
+    environment:
+      - TZ=Asia/Taipei
+    volumes:
+      - ./data:/data              # 設定資料庫、事件截圖
+      - ./recordings:/recordings  # 錄影（請放在空間足夠的硬碟）

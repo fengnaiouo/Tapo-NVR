@@ -53,5 +53,8 @@ node --check web\app.js                          # 前端語法檢查
 1. 同步修改根目錄 `Cargo.toml` 與 `desktop/src-tauri/tauri.conf.json` 的 `version`。
 2. `scripts\release.bat https://github.com/fengnaiouo/Tapo-NVR/releases/download/vX.Y.Z`（產出 `dist\Tapo-NVR_X.Y.Z_x64-setup.exe` 與 `latest.json`）。
 3. Commit、push，再 `gh release create vX.Y.Z dist\Tapo-NVR_X.Y.Z_x64-setup.exe dist\latest.json --latest`。
-4. 確認 `releases/latest/download/latest.json` 的版本正確、安裝檔可下載。
-5. 更新簽章私鑰位於 `%USERPROFILE%\.tauri\tapo-nvr.key`（含 `.password`），不可提交、不可遺失。
+4. 發布後 `.github/workflows/release-linux.yml` 會自動編譯 Linux 伺服器（x86_64／aarch64）、Docker 映像檔（ghcr.io）、桌面版（AppImage／deb），並把 `linux-x86_64` 加進 `latest.json`（簽章金鑰在 GitHub Secrets）。
+5. 確認 `releases/latest/download/latest.json` 的版本與平台正確、各安裝檔可下載。
+6. 更新簽章私鑰位於 `%USERPROFILE%\.tauri\tapo-nvr.key`（含 `.password`），不可提交、不可遺失。
+
+平台設定：`desktop/src-tauri/tauri.windows.conf.json`、`tauri.linux.conf.json` 分別指定附帶的 go2rtc／ffmpeg 與安裝檔格式。桌面版資料位置：Windows 為安裝資料夾，Linux 為 `~/.local/share/tapo-nvr`。

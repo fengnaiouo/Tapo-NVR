@@ -56,6 +56,14 @@ Rust로 개발된 TP-Link Tapo 카메라용 무료 오픈소스 모니터링·�
 .\scripts\start.bat     # 실행 후 http://localhost:8080 열기
 ```
 
+### 2c. Linux
+
+[Releases](https://github.com/fengnaiouo/Tapo-NVR/releases/latest)에서 받을 수 있습니다:
+
+- **서버**(x86_64 / aarch64, 라즈베리 파이 64비트 지원): `tar xzf tapo-nvr-*.tar.gz && cd tapo-nvr-*/ && sudo ./install.sh` (systemd 서비스로 자동 실행)
+- **Docker**: `ghcr.io/fengnaiouo/tapo-nvr:latest` (`docker/docker-compose.yml` 참고, `network_mode: host` 권장)
+- **데스크톱 앱**: `.AppImage`(자동 업데이트 지원) 또는 `.deb`
+
 ### 다른 기기에서 시청
 
 같은 LAN의 휴대폰이나 PC 브라우저에서 `http://<Tapo NVR을 실행 중인 PC의 IP>:8080`을 엽니다.

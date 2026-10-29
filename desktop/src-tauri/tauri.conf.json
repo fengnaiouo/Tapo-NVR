@@ -1,61 +1,54 @@
 {
-    "$schema":  "https://schema.tauri.app/config/2",
-    "productName":  "Tapo NVR",
-    "version":  "0.5.0",
-    "identifier":  "com.tapo-nvr.desktop",
-    "build":  {
-                  "frontendDist":  "../ui"
-              },
-    "app":  {
-                "withGlobalTauri":  true,
-                "windows":  [
-
-                            ],
-                "security":  {
-                                 "csp":  null
-                             }
-            },
-    "bundle":  {
-                   "active":  true,
-                   "targets":  [
-                                   "nsis"
-                               ],
-                   "createUpdaterArtifacts":  true,
-                   "publisher":  "Tapo NVR",
-                   "shortDescription":  "Tapo NVR - TP-Link Tapo camera monitoring and recording",
-                   "icon":  [
-                                "icons/icon.ico",
-                                "icons/icon.png"
-                            ],
-                   "resources":  {
-                                     "../../bin/go2rtc.exe":  "go2rtc.exe",
-                                     "../../bin/ffmpeg.exe":  "ffmpeg.exe"
-                                 },
-                   "windows":  {
-                                   "nsis":  {
-                                                "installMode":  "currentUser",
-                                                "languages":  [
-                                                                  "English",
-                                                                  "TradChinese",
-                                                                  "SimpChinese"
-                                                              ],
-                                                "displayLanguageSelector":  false,
-                                                "installerHooks":  "./nsis-hooks.nsh"
-                                            },
-                                   "webviewInstallMode":  {
-                                                              "type":  "downloadBootstrapper"
-                                                          }
-                               }
-               },
-    "plugins":  {
-                    "updater":  {
-                                    "pubkey":  "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEVCQkNBMkNBMkQzRTc5REIKUldUYmVUNHR5cUs4Nnk5clhyZ2tyb21UR1IraXExVitLaVVnUGsyTXVGZjQ5N2VxMUVjL3lNenoK",
-                                    "endpoints":  [
-
-                                                  ],
-                                    "windows":  {
-                                                    "installMode":  "passive"
-                                                }
-                                }
-                }
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Tapo NVR",
+  "version": "0.5.0",
+  "identifier": "com.tapo-nvr.desktop",
+  "build": {
+    "frontendDist": "../ui"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "createUpdaterArtifacts": true,
+    "publisher": "Tapo NVR",
+    "shortDescription": "Tapo NVR - TP-Link Tapo camera monitoring and recording",
+    "longDescription": "Monitoring, recording, playback and motion alerts for TP-Link Tapo cameras.",
+    "category": "Video",
+    "license": "AGPL-3.0-or-later",
+    "homepage": "https://fengnaiouo.github.io/Tapo-NVR/",
+    "icon": [
+      "icons/icon.ico",
+      "icons/icon.png"
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": [
+          "English",
+          "TradChinese",
+          "SimpChinese"
+        ],
+        "displayLanguageSelector": false,
+        "installerHooks": "./nsis-hooks.nsh"
+      },
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEVCQkNBMkNBMkQzRTc5REIKUldUYmVUNHR5cUs4Nnk5clhyZ2tyb21UR1IraXExVitLaVVnUGsyTXVGZjQ5N2VxMUVjL3lNenoK",
+      "endpoints": [],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
 }

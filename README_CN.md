@@ -57,6 +57,36 @@
 
 **忘记管理员密码？** 桌面版：系统托盘图标 →「应用程序偏好设置」→「忘记管理员密码？」。独立服务器：先停止服务器，再运行 `tapo-nvr reset-password --data data`。
 
+### 2c. Linux
+
+从 [Releases](https://github.com/fengnaiouo/Tapo-NVR/releases/latest) 下载：
+
+| 文件 | 适用 | 安装方式 |
+|---|---|---|
+| `tapo-nvr-X.Y.Z-linux-x86_64.tar.gz`／`-linux-aarch64.tar.gz` | 服务器、小主机、树莓派（64 比特） | `tar xzf tapo-nvr-*.tar.gz && cd tapo-nvr-*/ && sudo ./install.sh`：安装到 `/opt/tapo-nvr`，数据放在 `/var/lib/tapo-nvr`，并创建开机自动启动的 systemd 服务 |
+| Docker `ghcr.io/fengnaiouo/tapo-nvr` | NAS（Synology、Unraid、TrueNAS）或任何 Docker 主机（amd64／arm64） | 见下方 |
+| `Tapo-NVR_X.Y.Z_amd64.AppImage`／`.deb` | Linux 桌面（有系统托盘图标） | AppImage：`chmod +x` 后直接运行（支持自动更新）；deb：`sudo apt install ./Tapo-NVR_*.deb` |
+
+**Docker**（`docker/docker-compose.yml`）：
+
+```yaml
+services:
+  tapo-nvr:
+    image: ghcr.io/fengnaiouo/tapo-nvr:latest
+    restart: unless-stopped
+    network_mode: host        # 掃描攝影機與 WebRTC 需要
+    environment:
+      - TZ=Asia/Taipei
+    volumes:
+      - ./data:/data
+      - ./recordings:/recordings   # 在「設定 → 錄影」把錄影資料夾設為 /recordings
+```
+
+Linux 注意事项：
+- 摄像头密码改用文件夹内的密钥档（`secret.key`，权限 600）加密，而不是 Windows DPAPI，请保护好文件夹。
+- `tapo-nvr` 服务账号需要能写入录像文件夹，例如 `sudo chown tapo-nvr:tapo-nvr /srv/recordings`。
+- 部分发行版的桌面版内嵌浏览器不支持 WebRTC，会自动改用 MSE（延迟稍高）。
+
 ### 其他设备观看
 
 同一个局域网的手机或电脑，用浏览器打开 `http://<运行 Tapo NVR 的电脑 IP>:8080`。
@@ -122,4 +152,4 @@ docs/     GitHub Pages 網站與文件
 
 ## 许可证
 
-[GNU AGPL-3.0](LICENSE)。修改 Tapo NVR 并提供给他人使用（包含透过网络提供服务）时，必须以相同许可证公开源代码。安装档附带的程序（go2rtc、FFmpeg）请见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+[GNU AGPL-3.0](LICENSE)。修改 Tapo NVR 并提供给他人使用（包含透过网络提供服务）时，必须以相同授权公开源代码。安装档附带的程序（go2rtc、FFmpeg）请见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

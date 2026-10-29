@@ -1,0 +1,23 @@
+[Unit]
+Description=Tapo NVR - TP-Link Tapo camera monitoring and recording
+Documentation=https://github.com/fengnaiouo/Tapo-NVR
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=tapo-nvr
+Group=tapo-nvr
+WorkingDirectory=/var/lib/tapo-nvr
+ExecStart=/opt/tapo-nvr/tapo-nvr --data /var/lib/tapo-nvr
+# 讓網頁上的「重新啟動伺服器」可用（結束碼 3 由 systemd 重新啟動）
+Environment=TAPO_NVR_SUPERVISED=1
+Restart=always
+RestartSec=3
+# 安全強化：錄影資料夾請放在 /var/lib、/srv、/mnt、/media 等位置，並讓 tapo-nvr 使用者可寫入
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -184,8 +184,7 @@ pub async fn export(
         .args(["-c", "copy", "-movflags", "+faststart"])
         .arg(&out)
         .kill_on_drop(true);
-    #[cfg(windows)]
-    cmd.creation_flags(0x0800_0000);
+    crate::harden_child(&mut cmd);
     let output = tokio::time::timeout(Duration::from_secs(300), cmd.output())
         .await
         .map_err(|_| ApiError::bad(tr!("匯出逾時", "Export timed out")))?
@@ -312,8 +311,7 @@ pub async fn create_export_job(
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .kill_on_drop(true);
-        #[cfg(windows)]
-        cmd.creation_flags(0x0800_0000);
+        crate::harden_child(&mut cmd);
         let result: Result<(), String> = async {
             let mut child = cmd.spawn().map_err(|e| tr!("無法執行 ffmpeg：{e}", "Cannot run ffmpeg: {e}"))?;
             if let Some(stdout) = child.stdout.take() {

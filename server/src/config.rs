@@ -116,7 +116,7 @@ pub struct Go2rtcConfig {
 impl Default for Go2rtcConfig {
     fn default() -> Self {
         Self {
-            binary: "bin/go2rtc.exe".into(),
+            binary: if cfg!(windows) { "bin/go2rtc.exe" } else { "bin/go2rtc" }.into(),
             api_port: 1984,
             rtsp_port: 8554,
             webrtc_port: 8555,
