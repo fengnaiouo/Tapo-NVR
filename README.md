@@ -103,7 +103,7 @@ docs/     GitHub Pages 網站與文件
 2. `scripts\release.bat https://github.com/fengnaiouo/Tapo-NVR/releases/download/vX.Y.Z`
 3. `gh release create vX.Y.Z dist\Tapo-NVR_X.Y.Z_x64-setup.exe dist\latest.json`
 
-已安裝的程式會從 `releases/latest/download/latest.json` 自動檢查更新。更新檔以私鑰簽章（`%USERPROFILE%\.tauri\tapo-nvr.key`），**請備份私鑰與密碼檔**。
+已安裝的桌面版會在啟動 30 秒後及每 6 小時，從 `releases/latest/download/latest.json` 檢查更新；有新版時在應用程式視窗右下角顯示更新提示，按「立即更新」即可下載、安裝並自動重新啟動（也可從系統匣 →「檢查更新」手動檢查）。更新檔以私鑰簽章（`%USERPROFILE%\.tauri\tapo-nvr.key`），**請備份私鑰與密碼檔**。
 
 ## 注意事項
 

@@ -14,7 +14,7 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::webview::{NewWindowResponse, PermissionKind, PermissionResponse};
 use tauri::{AppHandle, Manager, RunEvent, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_autostart::ManagerExt as _;
-use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 use tauri_plugin_updater::UpdaterExt;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::Message;
@@ -67,8 +67,11 @@ struct AppState {
     restart_local: AtomicBool,
     quitting: AtomicBool,
     last_error: Mutex<Option<String>>,
-    /// 已經用通知提醒過的新版本
-    update_notified: Mutex<Option<String>>,
+    /// 應用程式內更新提示
+    pending_update: Mutex<Option<tauri_plugin_updater::Update>>,
+    update_dismissed: Mutex<Option<String>>,
+    update_banner: Mutex<Option<serde_json::Value>>,
+    update_installing: AtomicBool,
 }
 
 // ---------------------------------------------------------------------------
@@ -453,6 +456,8 @@ fn run_command(app: &AppHandle, cmd: &str) {
             let _ = w.set_fullscreen(false);
         }
         "open-recordings" => open_recordings(app),
+        "update-later" => update_later(app),
+        "update-install" => update_install(app),
         _ => tracing::warn!("未知的桌面指令：{cmd}"),
     }
 }
@@ -474,45 +479,94 @@ fn open_recordings(app: &AppHandle) {
 // ---------------------------------------------------------------------------
 // 自動更新
 
-/// 背景檢查：發現新版本時只顯示 Windows 通知（同一版本只提醒一次），點擊通知才詢問是否更新，
-/// 避免在使用者全螢幕（例如玩遊戲）時跳出對話框搶走焦點
-async fn background_update_check(app: &AppHandle) {
-    let url = effective_update_url(&app.state::<AppState>().prefs.lock().unwrap());
-    let Ok(endpoint) = url::Url::parse(url.trim()) else { return };
-    let Ok(updater) = app.updater_builder().endpoints(vec![endpoint]).and_then(|b| b.build()) else { return };
-    match updater.check().await {
-        Ok(Some(update)) => {
-            let version = update.version.clone();
-            {
-                let state = app.state::<AppState>();
-                let mut seen = state.update_notified.lock().unwrap();
-                if seen.as_deref() == Some(version.as_str()) {
-                    return;
-                }
-                *seen = Some(version.clone());
-            }
-            tracing::info!("發現新版本 {version}");
-            let h = app.clone();
-            toast::show(toast::Request {
-                title: tr!("Tapo NVR {version} 已推出", "Tapo NVR {version} is available"),
-                body: tr!("點這裡更新，或從系統匣選單 →「檢查更新」", "Click to update, or use the tray menu → Check for updates"),
-                image: None,
-                on_click: Box::new(move || {
-                    let h = h.clone();
-                    tauri::async_runtime::spawn(async move {
-                        if let Err(e) = check_update(&h, true).await {
-                            h.dialog().message(e).title("Tapo NVR").kind(MessageDialogKind::Warning).show(|_| {});
-                        }
-                    });
-                }),
-            });
-        }
-        Ok(None) => {}
-        Err(e) => tracing::warn!("檢查更新失敗：{e}"),
+/// 應用程式內的更新提示：在目前頁面底部插入橫幅（不使用 Windows 通知或系統對話框）。
+/// 橫幅上的按鈕以導向 https://tapo-app.invalid/cmd/... 的方式通知原生端（見 run_command）。
+const UPDATE_BANNER_JS: &str = r#"(function (d) {
+  var id = 'tapo-update-banner';
+  var old = document.getElementById(id);
+  if (old) old.remove();
+  if (!d) return;
+  var b = document.createElement('div');
+  b.id = id;
+  b.setAttribute('data-no-i18n', '');
+  b.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:2147483647;width:min(380px,calc(100vw - 32px));' +
+    'background:#181b22;color:#e6e8ec;border:1px solid #3b82f6;border-radius:10px;padding:14px 16px;' +
+    'box-shadow:0 12px 40px rgba(0,0,0,.5);font:14px/1.5 system-ui,"Segoe UI","Microsoft JhengHei","Microsoft YaHei",sans-serif';
+  var title = document.createElement('div');
+  title.style.cssText = 'font-weight:600;margin-bottom:4px';
+  title.textContent = d.title;
+  b.appendChild(title);
+  if (d.notes) {
+    var notes = document.createElement('div');
+    notes.style.cssText = 'color:#8a92a3;font-size:12px;max-height:140px;overflow:auto;white-space:pre-wrap;margin-bottom:8px';
+    notes.textContent = d.notes;
+    b.appendChild(notes);
+  }
+  if (d.progress != null) {
+    var bar = document.createElement('div');
+    bar.style.cssText = 'height:6px;background:#20242d;border-radius:3px;overflow:hidden;margin:6px 0';
+    var fill = document.createElement('div');
+    fill.style.cssText = 'height:100%;background:#3b82f6;transition:width .3s;width:' + (d.progress < 0 ? 100 : d.progress) + '%';
+    if (d.progress < 0) fill.style.opacity = '.5';
+    bar.appendChild(fill);
+    b.appendChild(bar);
+  }
+  if (d.status) {
+    var s = document.createElement('div');
+    s.style.cssText = 'font-size:12px;color:' + (d.error ? '#fca5a5' : '#8a92a3');
+    s.textContent = d.status;
+    b.appendChild(s);
+  }
+  var row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;margin-top:8px';
+  (d.buttons || []).forEach(function (btn) {
+    var e = document.createElement('button');
+    e.textContent = btn.label;
+    e.style.cssText = 'font:inherit;color:#e6e8ec;cursor:pointer;border-radius:6px;padding:6px 12px;border:1px solid ' +
+      (btn.primary ? '#3b82f6;background:#3b82f6' : '#2c313c;background:#20242d');
+    e.onclick = function () { location.href = 'https://tapo-app.invalid/cmd/' + btn.cmd; };
+    row.appendChild(e);
+  });
+  if (row.children.length) b.appendChild(row);
+  (document.body || document.documentElement).appendChild(b);
+})"#;
+
+/// 目前要顯示的橫幅（換頁後重新插入）；None 代表不顯示
+fn set_banner(app: &AppHandle, banner: Option<serde_json::Value>) {
+    *app.state::<AppState>().update_banner.lock().unwrap() = banner;
+    render_banner(app);
+}
+
+fn render_banner(app: &AppHandle) {
+    let banner = app.state::<AppState>().update_banner.lock().unwrap().clone();
+    if let Some(w) = app.get_webview_window("main") {
+        let arg = banner.map(|b| b.to_string()).unwrap_or_else(|| "null".into());
+        let _ = w.eval(format!("{UPDATE_BANNER_JS}({arg})"));
     }
 }
 
-async fn check_update(app: &AppHandle, interactive: bool) -> Result<String, String> {
+fn btn(label: String, cmd: &str, primary: bool) -> serde_json::Value {
+    serde_json::json!({"label": label, "cmd": cmd, "primary": primary})
+}
+
+fn show_update_available(app: &AppHandle, update: &tauri_plugin_updater::Update) {
+    let version = &update.version;
+    let current = &update.current_version;
+    set_banner(
+        app,
+        Some(serde_json::json!({
+            "title": tr!("🎉 Tapo NVR {version} 已推出（目前 {current}）", "🎉 Tapo NVR {version} is available (you have {current})"),
+            "notes": update.body.clone().unwrap_or_default(),
+            "status": tr!("更新時會短暫停止錄影，安裝完成後自動重新啟動。", "Recording pauses briefly; the app restarts after installing."),
+            "buttons": [
+                btn(tr!("稍後", "Later"), "update-later", false),
+                btn(tr!("立即更新", "Update now"), "update-install", true),
+            ],
+        })),
+    );
+}
+
+async fn find_update(app: &AppHandle) -> Result<Option<tauri_plugin_updater::Update>, String> {
     let url = effective_update_url(&app.state::<AppState>().prefs.lock().unwrap());
     let endpoint = url::Url::parse(url.trim()).map_err(|_| tr!("更新來源網址格式錯誤", "Invalid update URL"))?;
     let updater = app
@@ -521,43 +575,164 @@ async fn check_update(app: &AppHandle, interactive: bool) -> Result<String, Stri
         .map_err(|e| e.to_string())?
         .build()
         .map_err(|e| e.to_string())?;
-    match updater.check().await {
+    updater.check().await.map_err(|e| tr!("檢查更新失敗：{e}", "Update check failed: {e}"))
+}
+
+/// 背景檢查：同一個版本按過「稍後」就不再提醒（下次啟動或有更新的版本時才會再出現）
+async fn background_update_check(app: &AppHandle) {
+    match find_update(app).await {
         Ok(Some(update)) => {
-            let version = update.version.clone();
-            let notes = update.body.clone().unwrap_or_default();
-            let h = app.clone();
-            let current = update.current_version.clone();
-            let msg = tr!("發現新版本 {version}（目前 {current}）\n\n{notes}\n\n要立即下載並安裝嗎？安裝時程式會自動重新啟動。", "Version {version} is available (you have {current}).\n\n{notes}\n\nDownload and install now? Tapo NVR will restart.");
-            let yes = tauri::async_runtime::spawn_blocking(move || {
-                h.dialog()
-                    .message(msg)
-                    .title(tr!("Tapo NVR 更新", "Tapo NVR update"))
-                    .buttons(MessageDialogButtons::OkCancelCustom(tr!("立即更新", "Update now"), tr!("稍後", "Later")))
-                    .blocking_show()
-            })
-            .await
-            .unwrap_or(false);
-            if yes {
-                toast::show(toast::Request {
-                    title: tr!("正在下載 Tapo NVR {version}", "Downloading Tapo NVR {version}"),
-                    body: tr!("下載完成後會自動安裝並重新啟動", "It will install and restart automatically"),
-                    image: None,
-                    on_click: Box::new(|| {}),
-                });
-                stop_local(app).await;
-                update.download_and_install(|_, _| {}, || {}).await.map_err(|e| e.to_string())?;
-                app.restart();
+            let state = app.state::<AppState>();
+            if state.update_dismissed.lock().unwrap().as_deref() == Some(update.version.as_str()) {
+                return;
             }
-            Ok(tr!("發現新版本 {version}", "Version {version} is available"))
+            if state.update_installing.load(Ordering::SeqCst) {
+                return;
+            }
+            tracing::info!("發現新版本 {}", update.version);
+            show_update_available(app, &update);
+            *state.pending_update.lock().unwrap() = Some(update);
+        }
+        Ok(None) => {}
+        Err(e) => tracing::warn!("{e}"),
+    }
+}
+
+/// 使用者手動檢查（系統匣選單、偏好設定頁）：結果一律顯示在應用程式內
+async fn check_update(app: &AppHandle, show_window: bool) -> Result<String, String> {
+    if show_window {
+        show_main(app);
+    }
+    match find_update(app).await {
+        Ok(Some(update)) => {
+            let msg = tr!("發現新版本 {}", "Version {} is available", update.version);
+            *app.state::<AppState>().update_dismissed.lock().unwrap() = None;
+            show_update_available(app, &update);
+            *app.state::<AppState>().pending_update.lock().unwrap() = Some(update);
+            Ok(msg)
         }
         Ok(None) => {
-            if interactive {
-                app.dialog().message(tr!("目前已是最新版本。", "You are on the latest version.")).title("Tapo NVR").show(|_| {});
+            let msg = tr!("目前已是最新版本", "You are on the latest version");
+            if show_window {
+                flash_banner(app, format!("✅ {msg}（{}）", app.package_info().version), false);
             }
-            Ok(tr!("目前已是最新版本", "You are on the latest version"))
+            Ok(msg)
         }
-        Err(e) => Err(tr!("檢查更新失敗：{e}", "Update check failed: {e}")),
+        Err(e) => {
+            if show_window {
+                flash_banner(app, e.clone(), true);
+            }
+            Err(e)
+        }
     }
+}
+
+/// 短暫顯示的訊息橫幅，幾秒後自動消失
+fn flash_banner(app: &AppHandle, text: String, error: bool) {
+    let mut b = serde_json::json!({"title": "Tapo NVR", "status": text, "error": error});
+    if error {
+        b["buttons"] = serde_json::json!([btn(tr!("關閉", "Close"), "update-later", false)]);
+    }
+    set_banner(app, Some(b.clone()));
+    if !error {
+        let h = app.clone();
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            let state = h.state::<AppState>();
+            let same = state.update_banner.lock().unwrap().as_ref() == Some(&b);
+            if same {
+                set_banner(&h, None);
+            }
+        });
+    }
+}
+
+fn update_later(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    if state.update_installing.load(Ordering::SeqCst) {
+        return;
+    }
+    let version = state.pending_update.lock().unwrap().as_ref().map(|u| u.version.clone());
+    if version.is_some() {
+        *state.update_dismissed.lock().unwrap() = version;
+    }
+    set_banner(app, None);
+}
+
+fn update_install(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    let Some(update) = state.pending_update.lock().unwrap().clone() else { return };
+    if state.update_installing.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let h = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let version = update.version.clone();
+        let title = tr!("正在更新到 {version}", "Updating to {version}");
+        let progress = |pct: i64, status: String| {
+            serde_json::json!({"title": title, "progress": pct, "status": status})
+        };
+        set_banner(&h, Some(progress(-1, tr!("準備下載…", "Preparing download…"))));
+        let mut downloaded: u64 = 0;
+        let mut last_pct: i64 = -2;
+        let hh = h.clone();
+        let progress_cb = progress.clone();
+        let result = update
+            .download(
+                move |chunk, total| {
+                    downloaded += chunk as u64;
+                    let (pct, status) = match total {
+                        Some(t) if t > 0 => {
+                            let pct = (downloaded * 100 / t) as i64;
+                            (pct, format!("{:.1} / {:.1} MB", downloaded as f64 / 1048576.0, t as f64 / 1048576.0))
+                        }
+                        _ => (-1, format!("{:.1} MB", downloaded as f64 / 1048576.0)),
+                    };
+                    if pct != last_pct {
+                        last_pct = pct;
+                        let b = progress_cb(pct, status);
+                        let app = hh.clone();
+                        let _ = hh.run_on_main_thread(move || set_banner(&app, Some(b)));
+                    }
+                },
+                || {},
+            )
+            .await;
+        let bytes = match result {
+            Ok(b) => b,
+            Err(e) => {
+                h.state::<AppState>().update_installing.store(false, Ordering::SeqCst);
+                set_banner(
+                    &h,
+                    Some(serde_json::json!({
+                        "title": title,
+                        "status": tr!("下載失敗：{e}", "Download failed: {e}"),
+                        "error": true,
+                        "buttons": [btn(tr!("關閉", "Close"), "update-later", false), btn(tr!("重試", "Retry"), "update-install", true)],
+                    })),
+                );
+                return;
+            }
+        };
+        set_banner(&h, Some(progress(100, tr!("正在安裝，程式即將重新啟動…", "Installing, the app will restart…"))));
+        // 安裝前先停止伺服器與錄影，讓目前的片段正常收尾
+        stop_local(&h).await;
+        if let Err(e) = update.install(bytes) {
+            h.state::<AppState>().update_installing.store(false, Ordering::SeqCst);
+            set_banner(
+                &h,
+                Some(serde_json::json!({
+                    "title": title,
+                    "status": tr!("安裝失敗：{e}", "Install failed: {e}"),
+                    "error": true,
+                    "buttons": [btn(tr!("關閉", "Close"), "update-later", false)],
+                })),
+            );
+            start_local(&h);
+            return;
+        }
+        h.restart();
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -789,9 +964,7 @@ fn build_tray(app: &AppHandle, notifications: bool) -> tauri::Result<()> {
             "update" => {
                 let h = app.clone();
                 tauri::async_runtime::spawn(async move {
-                    if let Err(e) = check_update(&h, true).await {
-                        h.dialog().message(e).title("Tapo NVR").kind(MessageDialogKind::Warning).show(|_| {});
-                    }
+                    let _ = check_update(&h, true).await;
                 });
             }
             "quit" => {
@@ -863,6 +1036,12 @@ fn main() {
                         return false;
                     }
                     true
+                })
+                .on_page_load(|w, payload| {
+                    // 換頁後重新顯示更新橫幅
+                    if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+                        render_banner(w.app_handle());
+                    }
                 })
                 .on_new_window(move |url, _| {
                     let _ = &newwin;
