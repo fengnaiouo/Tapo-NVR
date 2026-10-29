@@ -4,7 +4,7 @@
 #   .\scripts\release.ps1 -BaseUrl "https://github.com/你的帳號/tapo-nvr/releases/download/v0.2.0" -Notes "新增錄影回放"
 #
 # 產出（dist 資料夾）：
-#   Tapo NVR_x.y.z_x64-setup.exe      安裝檔（給新使用者，也是更新包）
+#   Tapo-NVR_x.y.z_x64-setup.exe      安裝檔（給新使用者，也是更新包）
 #   latest.json                       上傳到「更新來源網址」，已安裝的電腦會自動偵測新版
 #
 # 發布步驟：先改 desktop\src-tauri\tauri.conf.json 與 Cargo.toml 的 version，
@@ -44,7 +44,9 @@ $sig = Get-Content "$($setup.FullName).sig" -Raw
 
 $dist = Join-Path $root 'dist'
 New-Item -ItemType Directory -Force $dist | Out-Null
-Copy-Item $setup.FullName $dist -Force
+# GitHub 會把上傳檔名中的空白改成「.」，所以改用不含空白的檔名
+$assetName = $setup.Name -replace ' ', '-'
+Copy-Item $setup.FullName (Join-Path $dist $assetName) -Force
 
 $latest = [ordered]@{
     version   = $version
@@ -53,7 +55,7 @@ $latest = [ordered]@{
     platforms = [ordered]@{
         'windows-x86_64' = [ordered]@{
             signature = $sig.Trim()
-            url       = "$($BaseUrl.TrimEnd('/'))/$([uri]::EscapeDataString($setup.Name))"
+            url       = "$($BaseUrl.TrimEnd('/'))/$([uri]::EscapeDataString($assetName))"
         }
     }
 }

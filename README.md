@@ -1,4 +1,4 @@
-# Tapo NVR
+﻿# Tapo NVR
 
 **繁體中文** | [English](#english)
 
@@ -33,7 +33,7 @@
 
 ### 方式 A：桌面應用程式（建議）
 
-1. 從 [Releases](https://github.com/fengnaiouo/Tapo-NVR/releases/latest) 下載並執行 `Tapo NVR_x.y.z_x64-setup.exe`
+1. 從 [Releases](https://github.com/fengnaiouo/Tapo-NVR/releases/latest) 下載並執行 `Tapo-NVR_x.y.z_x64-setup.exe`
 2. 第一次開啟：建立管理員帳號
 3. **⚙ 設定 → 攝影機**：按「🔍 掃描區網攝影機」→「加入」→ 填入攝影機帳戶 →「🔌 測試連線」→ 儲存
 4. **⚙ 設定 → 錄影**：選擇錄影資料夾（建議空間大的硬碟），再到每台攝影機選擇錄影模式
@@ -101,7 +101,7 @@ docs/     GitHub Pages 網站與文件
 
 1. 修改 `desktop/src-tauri/tauri.conf.json` 和根目錄 `Cargo.toml` 的 `version`
 2. `scripts\release.bat https://github.com/fengnaiouo/Tapo-NVR/releases/download/vX.Y.Z`
-3. `gh release create vX.Y.Z dist\*.exe dist\latest.json`
+3. `gh release create vX.Y.Z dist\Tapo-NVR_X.Y.Z_x64-setup.exe dist\latest.json`
 
 已安裝的程式會從 `releases/latest/download/latest.json` 自動檢查更新。更新檔以私鑰簽章（`%USERPROFILE%\.tauri\tapo-nvr.key`），**請備份私鑰與密碼檔**。
 
@@ -138,7 +138,7 @@ A monitoring and recording system for TP-Link Tapo cameras, written in Rust. Shi
 ## Getting started
 
 1. In the Tapo app: create a **Camera Account** (Advanced Settings) and enable **Third-Party Compatibility**; give the camera a fixed IP
-2. Download and run `Tapo NVR_x.y.z_x64-setup.exe` from [Releases](https://github.com/fengnaiouo/Tapo-NVR/releases/latest)
+2. Download and run `Tapo-NVR_x.y.z_x64-setup.exe` from [Releases](https://github.com/fengnaiouo/Tapo-NVR/releases/latest)
 3. Create the admin account, then **⚙ Settings → Cameras → Scan LAN** → Add → Test → Save
 4. **⚙ Settings → Recording**: choose a recording folder
 
