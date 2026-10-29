@@ -41,6 +41,9 @@ struct CameraView {
     has_cloud_password: bool,
     stream: crate::config::StreamSource,
     model: String,
+    mac: String,
+    schedule: Vec<crate::config::ScheduleRule>,
+    notify_kinds: Vec<String>,
 }
 
 pub async fn get_settings(State(state): State<AppState>) -> Json<Value> {
@@ -64,6 +67,9 @@ pub async fn get_settings(State(state): State<AppState>) -> Json<Value> {
             has_cloud_password: !x.cloud_password.is_empty(),
             stream: x.stream,
             model: x.model.clone(),
+            mac: x.mac.clone(),
+            schedule: x.schedule.clone(),
+            notify_kinds: x.notify_kinds.clone(),
         })
         .collect();
     let n = &c.notify;
@@ -273,6 +279,11 @@ pub async fn put_account(
     Extension(user): Extension<CurrentUser>,
     Json(r): Json<AccountReq>,
 ) -> ApiResult {
+    // 這裡修改的是主要管理員帳號；其他使用者改密碼用 /api/me/password
+    if user.username != state.cfg().auth.username {
+        return Err(ApiError(StatusCode::FORBIDDEN, tr!("只有主要管理員可以修改此帳號", "Only the primary administrator can change this account")));
+    }
+    let old_name = user.username.clone();
     let hash = state.cfg().auth.password_hash.clone();
     let current = r.current_password.clone();
     let valid = tokio::task::spawn_blocking(move || crate::auth::verify_password(&current, &hash))
@@ -311,9 +322,9 @@ pub async fn put_account(
         })
         .await
         .map_err(bad)?;
-    state.auth.rename_user(&username).await;
+    state.auth.rename_user(&old_name, &username).await;
     if password_changed {
-        state.auth.revoke_others(&user.token).await;
+        state.auth.revoke_others(&username, &user.token).await;
         tracing::info!("管理員密碼已變更，其他裝置已登出");
     }
     Ok(Json(json!({"ok": true, "others_logged_out": password_changed})).into_response())
@@ -343,6 +354,13 @@ pub struct CameraInput {
     stream: Option<crate::config::StreamSource>,
     #[serde(default)]
     model: Option<String>,
+    /// 從掃描結果加入時帶入；未提供時沿用原本的
+    #[serde(default)]
+    mac: Option<String>,
+    #[serde(default)]
+    schedule: Option<Vec<crate::config::ScheduleRule>>,
+    #[serde(default)]
+    notify_kinds: Option<Vec<String>>,
 }
 
 impl CameraInput {
@@ -375,6 +393,18 @@ impl CameraInput {
             stream: self.stream.unwrap_or_default(),
             model: self.model.map(|m| m.trim().chars().take(32).collect()).filter(|m: &String| !m.is_empty())
                 .or_else(|| existing.map(|c| c.model.clone()))
+                .unwrap_or_default(),
+            mac: self
+                .mac
+                .map(|m| crate::config::normalize_mac(&m))
+                .filter(|m| m.len() == 12)
+                .or_else(|| existing.map(|c| c.mac.clone()))
+                .unwrap_or_default(),
+            schedule: self.schedule.or_else(|| existing.map(|c| c.schedule.clone())).unwrap_or_default(),
+            notify_kinds: self
+                .notify_kinds
+                .map(|k| k.into_iter().filter(|s| crate::events::KINDS.contains(&s.as_str())).collect())
+                .or_else(|| existing.map(|c| c.notify_kinds.clone()))
                 .unwrap_or_default(),
         }
     }
@@ -474,6 +504,33 @@ pub struct TestReport {
     pub model: Option<String>,
 }
 
+/// 連不上攝影機時，依網路狀況給出可能原因與解法
+fn reach_hints(host: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    match host.parse::<std::net::Ipv4Addr>() {
+        Ok(ip) if !crate::discovery::is_local_ip(ip) => {
+            let nets: Vec<String> = crate::discovery::local_networks()
+                .iter()
+                .map(|(ip, mask)| format!("{}/{}", std::net::Ipv4Addr::from(u32::from(*ip) & u32::from(*mask)), u32::from(*mask).leading_ones()))
+                .collect();
+            out.push(tr!(
+                "💡 {host} 不在這台電腦所在的網段（{}）。攝影機可能接在另一台路由器後面（NAT 會擋住連線）：請把那台路由器改成「AP／橋接模式」，或讓這台電腦也接到那台路由器。",
+                "💡 {host} is not on this computer's network ({}). The camera may be behind another router (NAT blocks the connection): switch that router to AP/bridge mode, or connect this computer to that router.",
+                nets.join(", ")
+            ));
+        }
+        Ok(_) => {
+            out.push(tr!(
+                "💡 攝影機在同一網段但沒有回應：可能是 IP 已變更（路由器重開或改設定後常見）。請按「掃描區網攝影機」找新的 IP，或在路由器設定固定 IP。",
+                "💡 The camera is on the same network but not responding: its IP may have changed (common after a router restart or change). Use \"Scan LAN\" to find the new IP, or reserve a fixed IP in your router."
+            ));
+            out.push(tr!("💡 也請確認攝影機已開機、Tapo App 中顯示在線。", "💡 Also check that the camera is powered on and online in the Tapo app."));
+        }
+        Err(_) => out.push(tr!("💡 IP 格式錯誤，例如 192.168.1.50", "💡 Invalid IP, e.g. 192.168.1.50")),
+    }
+    out
+}
+
 /// 依序檢查：RTSP 連接埠 → ONVIF 登入 → PTZ → 事件訂閱
 pub async fn test_camera(cam: &CameraConfig) -> TestReport {
     let mut lines = Vec::new();
@@ -489,7 +546,8 @@ pub async fn test_camera(cam: &CameraConfig) -> TestReport {
         Ok(Ok(_)) => lines.push(tr!("✅ RTSP 連接埠 {} 可連線", "✅ RTSP port {} is reachable", cam.rtsp_port)),
         _ => {
             ok = false;
-            lines.push(tr!("❌ 無法連線 RTSP {addr}（請確認 IP、攝影機已開機、與伺服器在同一網段）", "❌ Cannot reach RTSP {addr} (check the IP, that the camera is on, and on the same network)"));
+            lines.push(tr!("❌ 無法連線 RTSP {addr}", "❌ Cannot reach RTSP {addr}"));
+            lines.extend(reach_hints(&cam.host));
         }
     }
     }
@@ -574,19 +632,43 @@ pub async fn test_camera_handler(State(state): State<AppState>, Json(r): Json<Ca
     Ok(Json(test_camera(&cam).await).into_response())
 }
 
-pub async fn discover(State(state): State<AppState>) -> Json<Value> {
-    let found = crate::discovery::probe(Duration::from_secs(3)).await;
+#[derive(Deserialize, Default)]
+struct DiscoverReq {
+    /// 另外要掃描的網段，例如 ["192.168.50.0/24"]
+    #[serde(default)]
+    subnets: Vec<String>,
+}
+
+pub async fn discover(State(state): State<AppState>, body: axum::body::Bytes) -> ApiResult {
+    let req: DiscoverReq = if body.is_empty() { DiscoverReq::default() } else { serde_json::from_slice(&body).unwrap_or_default() };
+    let mut extra = Vec::new();
+    for s in req.subnets.iter().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+        match crate::discovery::parse_subnet(s) {
+            Some(n) => extra.push(n),
+            None => {
+                return Err(ApiError::bad(tr!(
+                    "網段格式錯誤：{s}（例如 192.168.50.0/24，範圍 /22–/32）",
+                    "Invalid subnet: {s} (e.g. 192.168.50.0/24, /22–/32)"
+                )))
+            }
+        }
+    }
+    let found = crate::discovery::probe_with(Duration::from_secs(3), &extra).await;
     let cfg = state.cfg();
     let list: Vec<Value> = found
         .into_iter()
         .map(|f| {
-            let configured = cfg.cameras.iter().find(|c| c.host == f.host).map(|c| c.name.clone());
+            let mac = crate::config::normalize_mac(&f.mac);
+            let by_host = cfg.cameras.iter().find(|c| c.host == f.host);
+            // 同一台攝影機但 IP 已變更（以 MAC 判斷）
+            let moved = cfg.cameras.iter().find(|c| !mac.is_empty() && c.mac == mac && c.host != f.host);
             let mut v = json!(f);
-            v["configured_as"] = json!(configured);
+            v["configured_as"] = json!(by_host.map(|c| c.name.clone()));
+            v["moved_from"] = json!(moved.map(|c| json!({"id": c.id, "name": c.name, "host": c.host})));
             v
         })
         .collect();
-    Json(json!(list))
+    Ok(Json(json!(list)).into_response())
 }
 
 pub async fn restart(State(state): State<AppState>) -> ApiResult {

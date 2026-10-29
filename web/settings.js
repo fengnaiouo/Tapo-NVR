@@ -26,8 +26,12 @@ function toast(text, kind = '') {
 let settings = null;
 
 // ---------- 分頁 ----------
+let me = {admin: true, primary: true, username: ''};
+const ADMIN_TABS = ['status', 'cameras', 'recording', 'notify', 'server', 'system'];
 function showTab() {
-  const tab = (location.hash || '#cameras').slice(1);
+  let tab = (location.hash || (me.admin ? '#status' : '#account')).slice(1);
+  // 「僅觀看」的使用者只能看帳號、此裝置、關於
+  if (!me.admin && ADMIN_TABS.includes(tab)) tab = 'account';
   document.querySelectorAll('.tab').forEach((t) => t.hidden = t.id !== `tab-${tab}`);
   document.querySelectorAll('.settings-nav a').forEach((a) => a.classList.toggle('active', a.hash === `#${tab}`));
 }
@@ -163,13 +167,67 @@ function openCameraDialog(cam = null, preset = {}) {
   form.elements.cloud_password.placeholder = cam?.has_cloud_password ? t('已設定（不變更請留空）') : t('不使用請留空');
   syncStreamFields();
   form.elements.clear_cloud_password.parentElement.hidden = !cam?.has_cloud_password;
+  const kinds = values.notify_kinds || [];
+  document.querySelectorAll('#notify-kinds input').forEach((el) => el.checked = kinds.includes(el.dataset.kind));
+  $('#notify-kinds-box').open = kinds.length > 0;
+  renderRules(values.schedule || []);
+  $('#schedule-box').open = (values.schedule || []).length > 0;
   $('#camera-dialog').showModal();
   form.elements[values.host ? 'name' : 'host'].focus();
 }
 
+// ---------- 錄影排程規則 ----------
+const DAY_LABELS = [[1, '一'], [2, '二'], [3, '三'], [4, '四'], [5, '五'], [6, '六'], [0, '日']];
+function ruleRow(rule = {days: [1, 2, 3, 4, 5], start: '08:00', end: '18:00', mode: 'off'}) {
+  const row = document.createElement('div');
+  row.className = 'rule-row';
+  row.innerHTML = `
+    <div class="row wrap rule-days"></div>
+    <div class="row wrap">
+      <input type="time" data-f="start" required>
+      <span>–</span>
+      <input type="time" data-f="end" required>
+      <select data-f="mode">
+        <option value="continuous">連續錄影</option>
+        <option value="events">只錄移動事件</option>
+        <option value="off">不錄影</option>
+      </select>
+      <button type="button" class="danger" data-f="del" title="刪除規則">✕</button>
+    </div>`;
+  const days = row.querySelector('.rule-days');
+  for (const [d, label] of DAY_LABELS) {
+    const l = document.createElement('label');
+    l.className = 'check';
+    l.innerHTML = `<input type="checkbox" data-day="${d}"> ${label}`;
+    l.querySelector('input').checked = rule.days.includes(d);
+    days.appendChild(l);
+  }
+  row.querySelector('[data-f=start]').value = rule.start;
+  row.querySelector('[data-f=end]').value = rule.end;
+  row.querySelector('[data-f=mode]').value = rule.mode;
+  row.querySelector('[data-f=del]').onclick = () => row.remove();
+  return row;
+}
+function renderRules(rules) {
+  const box = $('#schedule-rules');
+  box.innerHTML = '';
+  for (const r of rules) box.appendChild(ruleRow(r));
+}
+function readRules() {
+  return [...document.querySelectorAll('#schedule-rules .rule-row')].map((row) => ({
+    days: [...row.querySelectorAll('[data-day]')].filter((el) => el.checked).map((el) => Number(el.dataset.day)),
+    start: row.querySelector('[data-f=start]').value,
+    end: row.querySelector('[data-f=end]').value,
+    mode: row.querySelector('[data-f=mode]').value,
+  }));
+}
+$('#btn-add-rule').onclick = () => $('#schedule-rules').appendChild(ruleRow());
+
 function cameraPayload() {
   const v = formValues($('#form-camera'));
   if (editing) v.id = editing.id;
+  v.notify_kinds = [...document.querySelectorAll('#notify-kinds input')].filter((el) => el.checked).map((el) => el.dataset.kind);
+  v.schedule = readRules();
   return v;
 }
 
@@ -224,7 +282,8 @@ $('#btn-discover').onclick = async () => {
   btn.textContent = '掃描中（約 3 秒）…';
   const list = $('#discover-list');
   try {
-    const found = await send('POST', '/api/settings/cameras/discover');
+    const subnets = $('#scan-subnets').value.split(/[,，\s]+/).map((s) => s.trim()).filter(Boolean);
+    const found = await send('POST', '/api/settings/cameras/discover', {subnets});
     $('#discover-result').hidden = false;
     list.innerHTML = found.length ? '' : `<li class="hint">${t('找不到攝影機。請確認攝影機與伺服器在同一個網段；也可以手動新增。')}</li>`;
     for (const f of found) list.appendChild(discoveredCard(f));
@@ -390,7 +449,27 @@ function discoveredCard(f) {
     badge(f.onvif_open, f.onvif_open ? 'ONVIF 可用' : 'ONVIF 未開啟（移動偵測通知需要）');
   }
   const act = $('.card-actions', li);
-  if (f.configured_as) {
+  if (f.moved_from) {
+    // 同一台攝影機（MAC 相同）但 IP 變了：一鍵更新
+    const cam = settings.cameras.find((c) => c.id === f.moved_from.id);
+    const note = document.createElement('span');
+    note.className = 'hint';
+    note.textContent = t('「{name}」的 IP 已從 {old} 變更', {name: f.moved_from.name, old: f.moved_from.host});
+    const fix = document.createElement('button');
+    fix.className = 'primary';
+    fix.textContent = t('更新為 {ip}', {ip: f.host});
+    fix.onclick = async () => {
+      try {
+        await send('PUT', `/api/settings/cameras/${cam.id}`, {...cam, host: f.host, password: '', cloud_password: ''});
+        toast(t('已將「{name}」更新為 {ip}', {name: cam.name, ip: f.host}));
+        load();
+        $('#btn-discover').click();
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+    };
+    act.append(note, fix);
+  } else if (f.configured_as) {
     act.textContent = t('已加入：{name}', {name: f.configured_as});
     act.classList.add('hint');
   } else if (!hub) {
@@ -401,6 +480,7 @@ function discoveredCard(f) {
       host: f.host,
       name: f.name || f.model || '',
       model: f.model || '',
+      mac: f.mac || '',
       onvif_port: f.onvif_port || 2020,
       stream: f.rtsp_open ? 'rtsp' : 'tapo',
       ptz: /^(C2|C5|TC7)/.test(f.model || '') || !f.model,
@@ -677,11 +757,228 @@ window.addEventListener('hashchange', () => {
   if (location.hash === '#about') loadAbout();
 });
 
+// ---------- 系統狀態 ----------
+const fmtUptime = (s) => {
+  const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
+  return d ? t('{d} 天 {h} 小時', {d, h}) : h ? t('{h} 小時 {m} 分', {h, m}) : t('{m} 分鐘', {m});
+};
+const MODE_LABEL = {events: '只錄移動事件', continuous: '連續錄影', off: '不錄影'};
+
+function statusRow(label, value, cls = '') {
+  const div = document.createElement('div');
+  div.className = 'st-row';
+  const a = document.createElement('span');
+  a.className = 'st-label';
+  a.textContent = t(label);
+  const b = document.createElement('span');
+  b.className = `st-value ${cls}`;
+  b.textContent = value;
+  b.setAttribute('data-no-i18n', '');
+  div.append(a, b);
+  return div;
+}
+
+async function loadStatus() {
+  if (!me.admin) return;
+  try {
+    const s = await api('/api/status');
+    $('#status-updated').textContent = t('更新於 {t}', {t: new Date().toLocaleTimeString()});
+    const warn = $('#status-warnings');
+    warn.innerHTML = '';
+    if (!s.warnings.length) {
+      const ok = document.createElement('div');
+      ok.className = 'st-banner ok';
+      ok.textContent = t('✅ 一切正常');
+      warn.appendChild(ok);
+    }
+    for (const w of s.warnings) {
+      const a = document.createElement('a');
+      a.className = `st-banner ${w.level}`;
+      a.href = w.link || '#';
+      a.textContent = `${{error: '⛔', warn: '⚠️', info: 'ℹ️'}[w.level] || ''} ${w.text}`;
+      a.setAttribute('data-no-i18n', '');
+      warn.appendChild(a);
+    }
+    const sum = $('#status-summary');
+    sum.innerHTML = '';
+    const card = (title, rows) => {
+      const c = document.createElement('div');
+      c.className = 'st-card';
+      const h = document.createElement('h4');
+      h.textContent = t(title);
+      c.append(h, ...rows);
+      sum.appendChild(c);
+    };
+    card('伺服器', [
+      statusRow('版本', `v${s.server.version}${s.server.desktop ? t('（桌面版）') : ''}`),
+      statusRow('已執行', fmtUptime(s.server.uptime_secs)),
+      statusRow('串流服務', s.server.go2rtc ? t('正常') : t('沒有回應'), s.server.go2rtc ? 'ok' : 'bad'),
+      statusRow('通知', s.server.armed ? (s.server.in_schedule ? t('🛡 已布防') : t('🛡 已布防（目前不在通知時段）')) : t('🔕 已撤防'), s.server.armed ? 'ok' : 'warn'),
+    ]);
+    const st = s.storage;
+    card('儲存空間', st.enabled ? [
+      statusRow('錄影資料夾', st.path),
+      statusRow('已使用', fmtBytes(st.used_bytes) + (st.max_gb ? t('（上限 {n} GB）', {n: st.max_gb}) : '')),
+      statusRow('磁碟剩餘', fmtBytes(st.free_bytes), st.free_bytes != null && st.free_bytes < 10e9 ? 'warn' : ''),
+      statusRow('保留天數', st.max_days ? t('{n} 天', {n: st.max_days}) : t('不限')),
+    ] : [statusRow('錄影', t('尚未設定錄影資料夾'), 'warn')]);
+
+    const box = $('#status-cameras');
+    box.innerHTML = '';
+    for (const c of s.cameras) {
+      const el = document.createElement('div');
+      el.className = 'st-card';
+      const h = document.createElement('h4');
+      h.textContent = c.name;
+      h.setAttribute('data-no-i18n', '');
+      const reach = c.reachable === false ? [t('離線：{e}', {e: c.reach_error || ''}), 'bad'] : c.reachable ? [t('在線'), 'ok'] : [t('檢查中…'), ''];
+      const motion = !c.motion_enabled ? [t('關閉'), ''] : c.motion_online === false ? [t('異常：{e}', {e: c.motion_error || ''}), 'bad']
+        : c.motion_online ? [c.active.length ? t('偵測中：{k}', {k: c.active.map(kindLabel).join('、')}) : t('正常'), 'ok'] : [t('連線中…'), ''];
+      let rec = [t('不錄影'), ''];
+      if (c.record_mode_now !== 'off') {
+        rec = c.recording?.state === 'recording' ? [t('🔴 錄影中'), 'ok'] : c.recording?.state === 'error' ? [t('異常：{e}', {e: c.recording.error || ''}), 'bad'] : [t('啟動中'), ''];
+      }
+      const mode = t(MODE_LABEL[c.record_mode_now]) + (c.has_schedule ? t('（依排程）') : '');
+      el.append(
+        h,
+        statusRow('連線', `${reach[0]} · ${c.host}`, reach[1]),
+        statusRow('移動偵測', motion[0], motion[1]),
+        statusRow('錄影', `${rec[0]} · ${mode}`, rec[1]),
+        statusRow('錄影佔用', fmtBytes(c.used_bytes)),
+        statusRow('24 小時事件', t('{n} 筆（偵測 {d}）', {n: c.events_24h, d: c.detections_24h})),
+        statusRow('最後事件', c.last_event ? `${kindLabel(c.last_event.kind)} · ${new Date(c.last_event.ts).toLocaleString()}` : '—'),
+      );
+      box.appendChild(el);
+    }
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+const KIND_LABELS = {
+  motion: '移動偵測', person: '偵測到人形', vehicle: '偵測到車輛', pet: '偵測到寵物', babycry: '偵測到嬰兒哭聲',
+  linecross: '越線偵測', intrusion: '區域入侵', tamper: '鏡頭遭遮蔽', offline: '攝影機離線', online: '攝影機恢復連線', ip_changed: '攝影機 IP 已更新',
+};
+function kindLabel(k) {
+  return t(KIND_LABELS[k] || k);
+}
+$('#btn-status-refresh').onclick = loadStatus;
+let statusTimer = null;
+function syncStatusTimer() {
+  clearInterval(statusTimer);
+  if (location.hash === '#status' || (!location.hash && me.admin)) {
+    loadStatus();
+    statusTimer = setInterval(loadStatus, 15000);
+  }
+}
+window.addEventListener('hashchange', syncStatusTimer);
+
+// ---------- 使用者 ----------
+async function loadUsers() {
+  const list = $('#user-list');
+  try {
+    const users = await api('/api/users');
+    list.innerHTML = '';
+    for (const u of users) {
+      const li = document.createElement('li');
+      li.className = 'card';
+      li.innerHTML = '<div class="card-main"><strong data-no-i18n></strong><div class="hint u-meta"></div></div><div class="card-actions"></div>';
+      $('strong', li).textContent = u.username;
+      $('.u-meta', li).textContent = u.primary ? t('主要管理員') : t(u.role === 'admin' ? '管理員' : '僅觀看');
+      const act = $('.card-actions', li);
+      if (!u.primary) {
+        const role = document.createElement('select');
+        role.innerHTML = `<option value="viewer">${t('僅觀看')}</option><option value="admin">${t('管理員')}</option>`;
+        role.value = u.role;
+        role.onchange = async () => {
+          try {
+            await send('PUT', `/api/users/${encodeURIComponent(u.username)}`, {role: role.value});
+            toast('已儲存');
+            loadUsers();
+          } catch (e) {
+            toast(e.message, 'error');
+          }
+        };
+        const reset = document.createElement('button');
+        reset.textContent = t('重設密碼');
+        reset.onclick = async () => {
+          const pw = prompt(t('輸入「{u}」的新密碼（至少 8 個字元）', {u: u.username}));
+          if (!pw) return;
+          try {
+            await send('PUT', `/api/users/${encodeURIComponent(u.username)}`, {password: pw});
+            toast(t('已重設密碼，「{u}」的所有裝置已登出', {u: u.username}));
+          } catch (e) {
+            toast(e.message, 'error');
+          }
+        };
+        const del = document.createElement('button');
+        del.className = 'danger';
+        del.textContent = t('刪除');
+        del.disabled = u.username === me.username;
+        del.onclick = async () => {
+          if (!confirm(t('確定刪除使用者「{u}」？', {u: u.username}))) return;
+          try {
+            await api(`/api/users/${encodeURIComponent(u.username)}`, {method: 'DELETE'});
+            toast(t('已刪除 {name}', {name: u.username}));
+            loadUsers();
+          } catch (e) {
+            toast(e.message, 'error');
+          }
+        };
+        act.append(role, reset, del);
+      }
+      list.appendChild(li);
+    }
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+$('#form-user').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    await send('POST', '/api/users', formValues(e.target));
+    e.target.reset();
+    toast('已新增使用者');
+    loadUsers();
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+});
+$('#form-my-password').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const v = formValues(e.target);
+  if (v.new_password !== v.confirm) return toast('兩次輸入的新密碼不一致', 'error');
+  try {
+    await send('POST', '/api/me/password', v);
+    e.target.reset();
+    toast('密碼已變更，其他裝置已登出');
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+});
+
+function applyRole() {
+  document.querySelectorAll('[data-admin]').forEach((el) => el.hidden = !me.admin);
+  $('#me-line').textContent = t('目前登入：{u}（{r}）', {u: me.username, r: t(me.primary ? '主要管理員' : me.admin ? '管理員' : '僅觀看')});
+  $('#form-account').hidden = !me.primary;
+  $('#form-my-password').hidden = me.primary;
+  $('#users-box').hidden = !me.admin;
+  // 關於頁的「檢查更新」與自動檢查開關需要管理員權限
+  for (const el of [$('#btn-check-update'), $('#auto-check')]) el.disabled = !me.admin;
+}
+
 // ---------- 啟動 ----------
-i18n.ready.then(() => {
+i18n.ready.then(async () => {
+  try {
+    me = await api('/api/me');
+  } catch { /* api() 會導向登入頁 */ }
+  applyRole();
   showTab();
   updateNotifyState();
-  load().catch((e) => toast(e.message, 'error'));
+  if (me.admin) {
+    load().catch((e) => toast(e.message, 'error'));
+    loadUsers();
+    syncStatusTimer();
+  }
   loadAbout();
-  if (location.hash === '#system') loadLogs();
+  if (location.hash === '#system' && me.admin) loadLogs();
 });

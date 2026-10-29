@@ -198,13 +198,23 @@ impl Store {
         Ok(())
     }
 
-    pub fn delete_sessions_except(&self, keep_token: &str) -> Result<()> {
-        self.conn().execute("DELETE FROM sessions WHERE token_hash <> ?1", [token_hash(keep_token)])?;
+    /// 某位使用者除了 keep_token 以外的 Session 全部刪除（變更密碼後登出其他裝置）
+    pub fn delete_user_sessions_except(&self, username: &str, keep_token: &str) -> Result<()> {
+        self.conn().execute(
+            "DELETE FROM sessions WHERE username = ?1 AND token_hash <> ?2",
+            params![username, token_hash(keep_token)],
+        )?;
         Ok(())
     }
 
-    pub fn rename_sessions(&self, username: &str) -> Result<()> {
-        self.conn().execute("UPDATE sessions SET username = ?1", [username])?;
+    /// 刪除某位使用者的所有 Session（刪除帳號、管理員重設密碼時）
+    pub fn delete_user_sessions(&self, username: &str) -> Result<()> {
+        self.conn().execute("DELETE FROM sessions WHERE username = ?1", [username])?;
+        Ok(())
+    }
+
+    pub fn rename_sessions(&self, old: &str, new: &str) -> Result<()> {
+        self.conn().execute("UPDATE sessions SET username = ?2 WHERE username = ?1", params![old, new])?;
         Ok(())
     }
 

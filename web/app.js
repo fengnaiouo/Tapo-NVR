@@ -1,5 +1,11 @@
 const $ = (s) => document.querySelector(s);
-const KIND_KEYS = {motion: '移動偵測', person: '偵測到人形', tamper: '鏡頭遭遮蔽', offline: '攝影機離線', online: '攝影機恢復連線'};
+const KIND_KEYS = {
+  motion: '移動偵測', person: '偵測到人形', vehicle: '偵測到車輛', pet: '偵測到寵物', babycry: '偵測到嬰兒哭聲',
+  linecross: '越線偵測', intrusion: '區域入侵', tamper: '鏡頭遭遮蔽', offline: '攝影機離線', online: '攝影機恢復連線',
+  ip_changed: '攝影機 IP 已更新',
+};
+// 「僅觀看」的使用者：隱藏攝影機控制、預設點新增 / 刪除等管理功能（伺服器端也會檢查）
+let isAdmin = true;
 const kindLabel = (k) => t(KIND_KEYS[k] || k);
 
 const state = {
@@ -132,7 +138,9 @@ function renderGrid() {
       tile.querySelector('[data-group=ptz]').hidden = false;
       tile.querySelectorAll('[data-ptz]').forEach((b) => bindHold(b, cam, ...b.dataset.ptz.split(',').map(Number)));
     }
-    if (cam.controls) {
+    if (!isAdmin) tile.querySelector('[data-act=privacy-off]').hidden = true;
+    if (cam.controls && !isAdmin) loadDevice(cam); // 仍顯示隱私遮罩，但不能操作
+    if (cam.controls && isAdmin) {
       tile.querySelector('[data-group=dev]').hidden = false;
       tile.querySelector('[data-act=privacy]').onclick = () =>
         setDevice(cam, {privacy: !state.device[cam.id]?.privacy});
@@ -193,9 +201,9 @@ function renderDevicePanel() {
   const cam = state.focus;
   const d = state.device[cam.id];
   $('#focus-privacy').hidden = d?.privacy !== true;
-  $('#dev-missing').hidden = !!cam.controls;
-  $('#dev-controls').hidden = !cam.controls;
-  if (!cam.controls) return;
+  $('#dev-missing').hidden = !!cam.controls || !isAdmin;
+  $('#dev-controls').hidden = !cam.controls || !isAdmin;
+  if (!cam.controls || !isAdmin) return;
   $('#dev-error').hidden = !d?.error;
   $('#dev-error').textContent = d?.error ? t('無法讀取攝影機設定：{e}', {e: d.error}) : '';
   for (const el of document.querySelectorAll('#dev-controls [data-dev]')) {
@@ -588,7 +596,8 @@ async function loadPresets() {
           .catch((e) => toast(e.message, 'error'));
         loadPresets();
       };
-      li.append(go, del);
+      li.append(go);
+      if (isAdmin) li.append(del);
       list.appendChild(li);
     }
   } catch (e) {
@@ -791,7 +800,9 @@ async function main() {
     localStorage.setItem('client', 'desktop');
     history.replaceState(null, '', '/');
   }
-  await api('/api/me');
+  const me = await api('/api/me');
+  isAdmin = me.admin !== false;
+  $('#preset-form').hidden = !isAdmin;
   await import('/player.js');
   await reloadCameras();
   $('#event-filter').onchange = applyEventFilter;

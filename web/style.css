@@ -477,3 +477,25 @@ button.disarmed { border-color: #b45309; color: #fbbf24; }
 .volume-row { align-items: center; gap: 8px; }
 .volume-row input[type=range] { flex: 1; min-width: 80px; }
 .volume-val { min-width: 42px; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12px; }
+/* ---- system status ---- */
+.st-banner { display: block; padding: 10px 14px; border-radius: 8px; margin: 6px 0; text-decoration: none; color: inherit; border: 1px solid var(--border); background: var(--panel); }
+.st-banner.ok { border-color: #166534; }
+.st-banner.info { border-color: #1d4ed8; }
+.st-banner.warn { border-color: #b45309; color: #fde68a; }
+.st-banner.error { border-color: #b91c1c; color: #fca5a5; }
+.status-summary, .status-cameras { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; margin: 10px 0; }
+.st-card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+.st-card h4 { margin: 0 0 8px; font-size: 15px; }
+.st-row { display: flex; gap: 10px; padding: 3px 0; font-size: 13px; }
+.st-label { color: var(--muted); min-width: 84px; flex-shrink: 0; }
+.st-value { word-break: break-word; }
+.st-value.ok { color: #86efac; }
+.st-value.warn { color: #fbbf24; }
+.st-value.bad { color: #fca5a5; }
+
+/* ---- recording schedule rules ---- */
+.rule-row { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; margin: 6px 0; display: flex; flex-direction: column; gap: 6px; }
+.rule-row .rule-days { gap: 10px; }
+.rule-row input[type=time] { width: auto; }
+.scan-extra { margin: 8px 0; }
+.scan-extra input { flex: 1; }

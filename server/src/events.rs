@@ -99,7 +99,7 @@ impl EventHub {
                 .events_between(camera, from, to)
                 .unwrap_or_default()
                 .into_iter()
-                .filter(|e| matches!(e.kind.as_str(), "motion" | "person" | "tamper"))
+                .filter(|e| DETECTION_KINDS.contains(&e.kind.as_str()))
                 .map(|e| (e.ts, e.ts)),
         );
         ranges
@@ -185,6 +185,14 @@ impl EventHub {
     }
 }
 
+/// 所有事件類型（偵測類 + 連線類）
+pub const KINDS: &[&str] = &["motion", "person", "vehicle", "pet", "babycry", "linecross", "intrusion", "tamper", "offline", "online"];
+
+/// 偵測類事件（事件錄影會保留其前後片段）
+pub const DETECTION_KINDS: &[&str] = &["motion", "person", "vehicle", "pet", "babycry", "linecross", "intrusion", "tamper"];
+
+/// ONVIF 事件 → 類型。Tapo 的智慧偵測以 RuleEngine/TPSmartEventDetector 等主題送出，
+/// SimpleItem 名稱如 IsPeople / IsVehicle / IsPet；越具體的類型越先比對
 fn classify(ev: &OnvifEvent) -> Option<(&'static str, bool)> {
     let active = match ev.value.to_ascii_lowercase().as_str() {
         "true" | "1" => true,
@@ -192,11 +200,22 @@ fn classify(ev: &OnvifEvent) -> Option<(&'static str, bool)> {
         _ => return None,
     };
     let t = format!("{} {}", ev.topic, ev.name).to_ascii_lowercase();
-    let kind = if t.contains("people") || t.contains("person") || t.contains("human") {
+    let has = |words: &[&str]| words.iter().any(|w| t.contains(w));
+    let kind = if has(&["people", "person", "human"]) {
         "person"
-    } else if t.contains("tamper") {
+    } else if has(&["vehicle"]) {
+        "vehicle"
+    } else if has(&["ispet", "/pet", "petdetect", "animal"]) {
+        "pet"
+    } else if has(&["babycry", "baby"]) {
+        "babycry"
+    } else if has(&["linecross", "linedetector", "crossed"]) {
+        "linecross"
+    } else if has(&["intrusion", "fielddetector", "objectsinside", "areaentry"]) {
+        "intrusion"
+    } else if has(&["tamper"]) {
         "tamper"
-    } else if t.contains("motion") {
+    } else if has(&["motion"]) {
         "motion"
     } else {
         return None;
@@ -329,7 +348,7 @@ async fn on_trigger(state: AppState, cam: CameraConfig, kind: &'static str) {
         }
     }
     // 布防：總開關、該攝影機的通知設定、通知時段都符合才推送；事件本身一律記錄
-    let notify = cfg.notify.enabled && cam.notify && cfg.notify.in_schedule(chrono::Local::now());
+    let notify = cfg.notify.enabled && cam.wants_notify(kind) && cfg.notify.in_schedule(chrono::Local::now());
     tracing::info!("[{}] 偵測到 {kind}", cam.id);
     let event = Event {
         id: 0,
@@ -370,5 +389,29 @@ async fn client_loop(state: AppState, mut socket: WebSocket) {
                 _ => {}
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::onvif::OnvifEvent;
+
+    fn ev(topic: &str, name: &str, value: &str) -> OnvifEvent {
+        OnvifEvent { topic: topic.into(), name: name.into(), value: value.into() }
+    }
+
+    #[test]
+    fn classify_kinds() {
+        let c = |t: &str, n: &str| super::classify(&ev(t, n, "true")).map(|(k, _)| k);
+        assert_eq!(c("tns1:RuleEngine/CellMotionDetector/Motion", "IsMotion"), Some("motion"));
+        assert_eq!(c("tns1:RuleEngine/PeopleDetector/People", "IsPeople"), Some("person"));
+        assert_eq!(c("tns1:RuleEngine/TPSmartEventDetector/TPSmartEvent", "IsVehicle"), Some("vehicle"));
+        assert_eq!(c("tns1:RuleEngine/TPSmartEventDetector/TPSmartEvent", "IsPet"), Some("pet"));
+        assert_eq!(c("tns1:RuleEngine/TPSmartEventDetector/TPSmartEvent", "IsBabyCry"), Some("babycry"));
+        assert_eq!(c("tns1:RuleEngine/LineDetector/Crossed", "ObjectId"), Some("linecross"));
+        assert_eq!(c("tns1:RuleEngine/FieldDetector/ObjectsInside", "IsInside"), Some("intrusion"));
+        assert_eq!(c("tns1:RuleEngine/TamperDetector/Tamper", "IsTamper"), Some("tamper"));
+        assert_eq!(c("tns1:Device/Location/Changed", "State"), None);
+        assert_eq!(super::classify(&ev("tns1:RuleEngine/CellMotionDetector/Motion", "IsMotion", "false")), Some(("motion", false)));
     }
 }

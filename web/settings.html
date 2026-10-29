@@ -20,18 +20,32 @@
 
   <div class="settings">
     <nav class="settings-nav">
-      <a href="#cameras">📹 攝影機</a>
-      <a href="#recording">⏺ 錄影</a>
-      <a href="#notify">🔔 偵測與通知</a>
+      <a href="#status" data-admin>📊 系統狀態</a>
+      <a href="#cameras" data-admin>📹 攝影機</a>
+      <a href="#recording" data-admin>⏺ 錄影</a>
+      <a href="#notify" data-admin>🔔 偵測與通知</a>
       <a href="#account">🔐 帳號安全</a>
-      <a href="#server">🌐 伺服器與外網</a>
+      <a href="#server" data-admin>🌐 伺服器與外網</a>
       <a href="#device">🖥 此裝置</a>
-      <a href="#system">🗂 系統與記錄</a>
+      <a href="#system" data-admin>🗂 系統與記錄</a>
       <a href="#about">⬆ 更新與關於</a>
       <div class="nav-version hint" id="nav-version" data-no-i18n></div>
     </nav>
 
     <main class="settings-main">
+      <!-- 系統狀態 -->
+      <section id="tab-status" class="tab" hidden>
+        <h2>系統狀態</h2>
+        <div class="row wrap">
+          <button id="btn-status-refresh">↻ 重新整理</button>
+          <span id="status-updated" class="hint" data-no-i18n></span>
+        </div>
+        <div id="status-warnings"></div>
+        <div id="status-summary" class="status-summary"></div>
+        <h3>攝影機</h3>
+        <div id="status-cameras" class="status-cameras"></div>
+      </section>
+
       <!-- 攝影機 -->
       <section id="tab-cameras" class="tab">
         <h2>攝影機</h2>
@@ -39,6 +53,13 @@
           <button id="btn-add-camera" class="primary">＋ 新增攝影機</button>
           <button id="btn-discover">🔍 掃描區網攝影機</button>
         </div>
+        <details class="scan-extra">
+          <summary>掃描其他網段</summary>
+          <div class="row">
+            <input id="scan-subnets" placeholder="192.168.50.0/24, 192.168.0.20">
+          </div>
+          <small class="hint">預設只掃描這台電腦所在的網段。攝影機在其他網段時才需要填（可填多個，以逗號分隔）；若中間隔著另一台路由器（NAT），請把那台路由器改成 AP／橋接模式。</small>
+        </details>
         <div id="discover-result" hidden>
           <h3>掃描結果</h3>
           <ul id="discover-list" class="card-list"></ul>
@@ -141,14 +162,48 @@
       <!-- 帳號 -->
       <section id="tab-account" class="tab" hidden>
         <h2>帳號安全</h2>
+        <p class="hint" id="me-line" data-no-i18n></p>
+
+        <!-- 一般使用者：只能修改自己的密碼 -->
+        <form id="form-my-password" class="form" hidden>
+          <h3>修改我的密碼</h3>
+          <label>目前密碼<input name="current_password" type="password" required autocomplete="current-password"></label>
+          <label>新密碼<input name="new_password" type="password" minlength="8" required autocomplete="new-password"></label>
+          <label>再輸入一次新密碼<input name="confirm" type="password" required autocomplete="new-password"></label>
+          <p class="hint">變更後，你在其他裝置上的登入會被登出。</p>
+          <button type="submit" class="primary">變更密碼</button>
+        </form>
+
+        <!-- 主要管理員 -->
         <form id="form-account" class="form">
           <label>登入帳號<input name="username" required maxlength="32" autocomplete="username"></label>
           <label>新密碼（不修改請留空）<input name="new_password" type="password" minlength="8" autocomplete="new-password"></label>
           <label>再輸入一次新密碼<input name="confirm" type="password" autocomplete="new-password"></label>
           <label>目前密碼（必填）<input name="current_password" type="password" required autocomplete="current-password"></label>
-          <p class="hint">變更密碼後，其他已登入的瀏覽器與桌面版都會被登出。</p>
+          <p class="hint">變更密碼後，你在其他瀏覽器與桌面版的登入都會被登出。</p>
           <button type="submit" class="primary">儲存</button>
         </form>
+
+        <!-- 使用者管理（管理員） -->
+        <div id="users-box" hidden>
+          <h3>👥 使用者</h3>
+          <p class="hint">可以為家人建立帳號。「僅觀看」可看即時影像、回放、事件與匯出、操作雲台，但不能修改設定或控制攝影機（隱私、夜視等）。</p>
+          <ul id="user-list" class="card-list"></ul>
+          <form id="form-user" class="form">
+            <h3>新增使用者</h3>
+            <div class="row wrap">
+              <label>帳號<input name="username" required maxlength="32" autocomplete="off"></label>
+              <label>密碼<input name="password" type="password" minlength="8" required autocomplete="new-password"></label>
+              <label>權限
+                <select name="role">
+                  <option value="viewer">僅觀看</option>
+                  <option value="admin">管理員</option>
+                </select>
+              </label>
+            </div>
+            <button type="submit">＋ 新增使用者</button>
+          </form>
+        </div>
       </section>
 
       <!-- 伺服器 -->
@@ -318,6 +373,7 @@
         </select>
       </label>
       <input name="model" type="hidden">
+      <input name="mac" type="hidden">
       <label>攝影機帳戶 - 帳號<input name="username" required autocomplete="off"></label>
       <label>攝影機帳戶 - 密碼<input name="password" type="password" autocomplete="new-password"></label>
       <label>錄影模式
@@ -332,6 +388,28 @@
         <label class="check"><input name="motion" type="checkbox" checked> 移動偵測</label>
         <label class="check"><input name="notify" type="checkbox" checked> 推送通知</label>
       </div>
+      <details id="notify-kinds-box">
+        <summary>通知類型</summary>
+        <p class="hint">不勾選任何項目 = 所有類型都通知。智慧偵測（人形、車輛、寵物等）需攝影機支援，並在 Tapo App 中開啟。</p>
+        <div class="row wrap" id="notify-kinds">
+          <label class="check"><input type="checkbox" data-kind="motion"> 移動偵測</label>
+          <label class="check"><input type="checkbox" data-kind="person"> 人形</label>
+          <label class="check"><input type="checkbox" data-kind="vehicle"> 車輛</label>
+          <label class="check"><input type="checkbox" data-kind="pet"> 寵物</label>
+          <label class="check"><input type="checkbox" data-kind="babycry"> 嬰兒哭聲</label>
+          <label class="check"><input type="checkbox" data-kind="linecross"> 越線</label>
+          <label class="check"><input type="checkbox" data-kind="intrusion"> 區域入侵</label>
+          <label class="check"><input type="checkbox" data-kind="tamper"> 鏡頭遮蔽</label>
+          <label class="check"><input type="checkbox" data-kind="offline"> 離線</label>
+          <label class="check"><input type="checkbox" data-kind="online"> 恢復連線</label>
+        </div>
+      </details>
+      <details id="schedule-box">
+        <summary>錄影排程</summary>
+        <p class="hint">依序比對，第一個符合目前時間的規則決定錄影模式；都不符合時使用上方的「錄影模式」。結束早於開始代表跨夜。</p>
+        <div id="schedule-rules"></div>
+        <button type="button" id="btn-add-rule">＋ 新增規則</button>
+      </details>
       <details>
         <summary>攝影機控制與雙向語音（選填）</summary>
         <label>TP-Link 帳號的密碼

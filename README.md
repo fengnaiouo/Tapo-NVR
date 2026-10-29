@@ -13,13 +13,14 @@ A free, open-source monitoring and recording system for TP-Link Tapo cameras, wr
 | Live view | Multi-camera grid, 2K main stream, low-latency WebRTC on LAN, MSE over the internet, 1–4× digital zoom |
 | PTZ | Press-and-hold movement, keyboard arrows, add / go to / delete presets (ONVIF or Tapo API) |
 | Camera controls | Privacy mode, night vision, motion detection & sensitivity, person detection, auto-tracking, SD card status |
-| Recording | Per camera: **continuous** or **motion-only** (with pre/post roll); retention by days and size; automatic cleanup when disk space is low |
-| Playback | 24-hour timeline (zoomable to 15 minutes), event markers, 0.5–16× speed, snapshots, **MP4 export** |
-| Alerts | Motion detection, snapshots, event log; Windows native, browser and **phone push** (ntfy) notifications; one-click **arm / disarm**, **notification schedule** (e.g. nights only), **camera offline / back online** alerts |
+| Recording | Per camera: **continuous** or **motion-only** (with pre/post roll); **recording schedule** (e.g. off during work hours, continuous at night); retention by days and size; automatic cleanup when disk space is low |
+| Playback | 24-hour timeline (zoomable to 15 minutes), event markers, 0.5–16× speed, snapshots, **MP4 export up to 6 hours** (runs in the background with progress) |
+| Alerts | Motion and **Tapo smart detection** (person, vehicle, pet, baby crying, line crossing, intrusion) with per-camera notification types, snapshots, event log; Windows native, browser and **phone push** (ntfy) notifications; one-click **arm / disarm**, **notification schedule** (e.g. nights only), **camera offline / back online** alerts |
 | Two-way audio | Talk to the camera from your PC (requires the TP-Link account password) |
-| Camera support | LAN discovery (ONVIF + TP-Link TDP); C1xx / C2xx / C3xx / C5xx and other Tapo models; models without RTSP use the Tapo private stream; legacy and new (TPAP) login protocols |
+| Camera support | LAN discovery (ONVIF + TP-Link TDP), also on other subnets; **automatic recovery when a camera's IP changes** (matched by MAC); clear connection-test hints (IP changed, NAT, wrong account); C1xx / C2xx / C3xx / C5xx and other Tapo models; models without RTSP use the Tapo private stream; legacy and new (TPAP) login protocols |
 | Remote access | Direct on the LAN, or from anywhere through Cloudflare Tunnel |
-| Settings | **Everything is configured in the app or web UI (⚙ Settings)**; most changes apply immediately; settings backup / restore (without passwords); built-in system log viewer; version and update status in Settings → Updates & about |
+| Users | **Multiple users**: administrators, and viewers who can watch, play back and export but cannot change settings |
+| Settings | **Everything is configured in the app or web UI (⚙ Settings)**; most changes apply immediately; **system status overview** (connection, motion detection, recording, storage, warnings); settings backup / restore (without passwords); built-in system log viewer; version and update status in Settings → Updates & about |
 | Desktop app | Tray icon, start with Windows, keeps recording in the background, in-app auto-update |
 | Security | Settings in SQLite with **camera passwords encrypted by Windows DPAPI**; passwords never appear in config files or process command lines; sessions stored as hashes only and **sign-in is required again after closing the browser / app or restarting**; Argon2, login rate limiting, CSRF protection; camera passwords never reach the browser |
 

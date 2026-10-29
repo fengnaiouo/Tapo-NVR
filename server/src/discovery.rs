@@ -38,6 +38,21 @@ pub struct Found {
 }
 
 pub async fn probe(wait: Duration) -> Vec<Found> {
+    probe_with(wait, &[]).await
+}
+
+/// 解析 "192.168.50.0/24" 或單一 IP "192.168.50.20"；只接受 /22–/32（最多 1024 個位址）
+pub fn parse_subnet(s: &str) -> Option<(Ipv4Addr, u8)> {
+    let s = s.trim();
+    let (ip, len) = match s.split_once('/') {
+        Some((ip, len)) => (ip.trim().parse::<Ipv4Addr>().ok()?, len.trim().parse::<u8>().ok()?),
+        None => (s.parse::<Ipv4Addr>().ok()?, 32),
+    };
+    (22..=32).contains(&len).then_some((ip, len))
+}
+
+/// 本機網段 + 使用者指定的其他網段（例如另一台路由器後面、或經由路由可達的網段）
+pub async fn probe_with(wait: Duration, extra: &[(Ipv4Addr, u8)]) -> Vec<Found> {
     let locals: Vec<(Ipv4Addr, Ipv4Addr)> = if_addrs::get_if_addrs()
         .unwrap_or_default()
         .into_iter()
@@ -48,10 +63,14 @@ pub async fn probe(wait: Duration) -> Vec<Found> {
             _ => None,
         })
         .collect();
-    let tasks: Vec<_> = locals
+    let mut tasks: Vec<_> = locals
         .into_iter()
         .map(|(ip, mask)| tokio::spawn(probe_on(ip, mask, wait)))
         .collect();
+    for &(ip, len) in extra {
+        let mask = if len == 0 { 0 } else { u32::MAX << (32 - u32::from(len)) };
+        tasks.push(tokio::spawn(probe_remote(Ipv4Addr::from(u32::from(ip) & mask), len, wait)));
+    }
 
     let mut found: HashMap<String, Found> = HashMap::new();
     for t in tasks {
@@ -161,6 +180,58 @@ async fn probe_on(local: Ipv4Addr, mask: Ipv4Addr, wait: Duration) -> Vec<Found>
         }
     }
     out
+}
+
+/// 非本機網段：只能逐一單播（多播 / 廣播不會跨路由器）
+async fn probe_remote(net: Ipv4Addr, len: u8, wait: Duration) -> Vec<Found> {
+    let Ok(sock) = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0)).await else { return Vec::new() };
+    let sock = Arc::new(sock);
+    let onvif = onvif_probe();
+    let tdp = tdp_probe();
+    let sender = sock.clone();
+    tokio::spawn(async move {
+        let base = u32::from(net);
+        let count: u32 = if len >= 32 { 1 } else { 1u32 << (32 - u32::from(len)) };
+        let hosts: Vec<u32> = if count <= 2 { (base..base + count).collect() } else { ((base + 1)..(base + count - 1)).collect() };
+        for (i, host) in hosts.into_iter().enumerate() {
+            let ip = Ipv4Addr::from(host);
+            let _ = sender.send_to(onvif.as_bytes(), (ip, ONVIF_PORT)).await;
+            let _ = sender.send_to(&tdp, (ip, TDP_PORT)).await;
+            if i % 32 == 31 {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        }
+    });
+    let mut out = Vec::new();
+    let deadline = tokio::time::Instant::now() + wait;
+    let mut buf = vec![0u8; 65535];
+    while let Ok(Ok((n, from))) = tokio::time::timeout_at(deadline, sock.recv_from(&mut buf)).await {
+        let data = &buf[..n];
+        let parsed = match from.port() {
+            TDP_PORT => parse_tdp(data, from.ip()),
+            _ => parse_onvif(&String::from_utf8_lossy(data), from.ip()),
+        };
+        if let Some(f) = parsed {
+            out.push(f);
+        }
+    }
+    out
+}
+
+/// 本機所在的 IPv4 網段（給連線測試判斷「攝影機是否在同一網段」）
+pub fn local_networks() -> Vec<(Ipv4Addr, Ipv4Addr)> {
+    if_addrs::get_if_addrs()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|i| match i.addr {
+            if_addrs::IfAddr::V4(v4) if !v4.ip.is_loopback() && !v4.ip.is_link_local() => Some((v4.ip, v4.netmask)),
+            _ => None,
+        })
+        .collect()
+}
+
+pub fn is_local_ip(ip: Ipv4Addr) -> bool {
+    local_networks().iter().any(|(local, mask)| u32::from(*local) & u32::from(*mask) == u32::from(ip) & u32::from(*mask))
 }
 
 // ---------------------------------------------------------------------------
@@ -294,4 +365,16 @@ fn percent_decode(s: &str) -> String {
         i += 1;
     }
     String::from_utf8_lossy(&out).into_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn subnets() {
+        use std::net::Ipv4Addr;
+        assert_eq!(super::parse_subnet("192.168.50.0/24"), Some((Ipv4Addr::new(192, 168, 50, 0), 24)));
+        assert_eq!(super::parse_subnet(" 192.168.50.20 "), Some((Ipv4Addr::new(192, 168, 50, 20), 32)));
+        assert_eq!(super::parse_subnet("10.0.0.0/8"), None); // 太大
+        assert_eq!(super::parse_subnet("abc"), None);
+    }
 }

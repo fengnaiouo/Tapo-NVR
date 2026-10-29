@@ -209,6 +209,203 @@ pub async fn export(
         .into_response())
 }
 
+// ---------------------------------------------------------------------------
+// 背景匯出：建立工作後立即回應，前端輪詢進度，完成後再下載
+// （長片段匯出不會讓請求一直等待，經 Cloudflare Tunnel 也不會逾時）
+
+#[derive(Clone, serde::Serialize)]
+pub struct ExportJob {
+    /// running / done / error
+    state: String,
+    progress: u8,
+    error: Option<String>,
+    name: String,
+    size: u64,
+    #[serde(skip)]
+    path: std::path::PathBuf,
+    #[serde(skip)]
+    owner: String,
+    #[serde(skip)]
+    created: std::time::Instant,
+}
+
+static JOBS: std::sync::LazyLock<std::sync::Mutex<std::collections::HashMap<String, ExportJob>>> =
+    std::sync::LazyLock::new(Default::default);
+
+fn set_job(id: &str, f: impl FnOnce(&mut ExportJob)) {
+    if let Some(j) = JOBS.lock().unwrap().get_mut(id) {
+        f(j);
+    }
+}
+
+pub async fn create_export_job(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    axum::Extension(user): axum::Extension<crate::auth::CurrentUser>,
+    Json(q): Json<ExportQuery>,
+) -> ApiResult {
+    known_camera(&state, &id)?;
+    let root = root(&state)?;
+    if q.end <= q.start {
+        return Err(ApiError::bad(tr!("結束時間需晚於開始時間", "End time must be after start time")));
+    }
+    if q.end - q.start > chrono::Duration::hours(6) {
+        return Err(ApiError::bad(tr!("一次最多匯出 6 小時", "Export is limited to 6 hours")));
+    }
+    let (start, end) = (q.start.with_timezone(&Local), q.end.with_timezone(&Local));
+    let mut dates = vec![start.format("%Y-%m-%d").to_string()];
+    let end_date = end.format("%Y-%m-%d").to_string();
+    if end_date != dates[0] {
+        dates.push(end_date);
+    }
+    let cam = id.clone();
+    let segs: Vec<_> = tokio::task::spawn_blocking(move || dates.iter().flat_map(|d| list_day(&root, &cam, d)).collect::<Vec<_>>())
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|s| s.end > start && s.start < end)
+        .collect();
+    let Some(first) = segs.first() else {
+        return Err(ApiError(StatusCode::NOT_FOUND, tr!("這段時間沒有錄影", "No recordings in this period")));
+    };
+    let dir = state.data_dir.join("exports");
+    tokio::fs::create_dir_all(&dir).await.map_err(|e| ApiError::bad(e.to_string()))?;
+    cleanup_exports(&dir).await;
+    {
+        let mut jobs = JOBS.lock().unwrap();
+        jobs.retain(|_, j| j.created.elapsed() < Duration::from_secs(3600));
+        if jobs.values().filter(|j| j.state == "running").count() >= 3 {
+            return Err(ApiError::bad(tr!("同時進行的匯出太多，請稍候再試", "Too many exports in progress, please try again later")));
+        }
+    }
+    let job_id = crate::auth::random_hex(16);
+    let stamp = format!("{}_{}", id, start.format("%Y%m%d_%H%M%S"));
+    let list = dir.join(format!("{job_id}.txt"));
+    let out = dir.join(format!("{job_id}.mp4"));
+    let body: String = segs.iter().map(|s| format!("file '{}'\n", s.path.to_string_lossy().replace('\'', "'\\''"))).collect();
+    tokio::fs::write(&list, body).await.map_err(|e| ApiError::bad(e.to_string()))?;
+    let offset = (start - first.start).num_milliseconds().max(0) as f64 / 1000.0;
+    let duration = (end - start).num_milliseconds() as f64 / 1000.0;
+    JOBS.lock().unwrap().insert(
+        job_id.clone(),
+        ExportJob {
+            state: "running".into(),
+            progress: 0,
+            error: None,
+            name: format!("{stamp}.mp4"),
+            size: 0,
+            path: out.clone(),
+            owner: user.username.clone(),
+            created: std::time::Instant::now(),
+        },
+    );
+    let ffmpeg = state.ffmpeg_bin.clone();
+    let jid = job_id.clone();
+    tokio::spawn(async move {
+        use tokio::io::AsyncBufReadExt;
+        let mut cmd = tokio::process::Command::new(&ffmpeg);
+        cmd.args(["-hide_banner", "-nostdin", "-loglevel", "error", "-nostats", "-progress", "pipe:1", "-y", "-f", "concat", "-safe", "0", "-i"])
+            .arg(&list)
+            .args(["-ss", &format!("{offset:.3}"), "-t", &format!("{duration:.3}")])
+            .args(["-c", "copy", "-movflags", "+faststart"])
+            .arg(&out)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .kill_on_drop(true);
+        #[cfg(windows)]
+        cmd.creation_flags(0x0800_0000);
+        let result: Result<(), String> = async {
+            let mut child = cmd.spawn().map_err(|e| tr!("無法執行 ffmpeg：{e}", "Cannot run ffmpeg: {e}"))?;
+            if let Some(stdout) = child.stdout.take() {
+                let jid2 = jid.clone();
+                tokio::spawn(async move {
+                    let mut lines = tokio::io::BufReader::new(stdout).lines();
+                    while let Ok(Some(line)) = lines.next_line().await {
+                        // out_time_us / out_time_ms 皆為微秒
+                        if let Some(v) = line.strip_prefix("out_time_us=").or_else(|| line.strip_prefix("out_time_ms=")) {
+                            if let Ok(us) = v.trim().parse::<f64>() {
+                                let pct = ((us / 1e6) / duration.max(0.1) * 100.0).clamp(0.0, 99.0) as u8;
+                                set_job(&jid2, |j| j.progress = j.progress.max(pct));
+                            }
+                        }
+                    }
+                });
+            }
+            let mut stderr = String::new();
+            if let Some(mut err) = child.stderr.take() {
+                use tokio::io::AsyncReadExt;
+                let _ = err.read_to_string(&mut stderr).await;
+            }
+            let status = tokio::time::timeout(Duration::from_secs(3600), child.wait())
+                .await
+                .map_err(|_| tr!("匯出逾時", "Export timed out"))?
+                .map_err(|e| e.to_string())?;
+            if !status.success() {
+                return Err(tr!("匯出失敗：{}", "Export failed: {}", stderr.trim()));
+            }
+            Ok(())
+        }
+        .await;
+        let _ = tokio::fs::remove_file(&list).await;
+        match result {
+            Ok(()) => {
+                let size = tokio::fs::metadata(&out).await.map(|m| m.len()).unwrap_or(0);
+                set_job(&jid, |j| {
+                    j.state = "done".into();
+                    j.progress = 100;
+                    j.size = size;
+                });
+            }
+            Err(e) => {
+                let _ = tokio::fs::remove_file(&out).await;
+                tracing::warn!("匯出失敗：{e}");
+                set_job(&jid, |j| {
+                    j.state = "error".into();
+                    j.error = Some(e);
+                });
+            }
+        }
+    });
+    Ok(Json(json!({"job": job_id})).into_response())
+}
+
+fn get_job(id: &str, user: &crate::auth::CurrentUser) -> Result<ExportJob, ApiError> {
+    JOBS.lock()
+        .unwrap()
+        .get(id)
+        .filter(|j| j.owner == user.username)
+        .cloned()
+        .ok_or_else(|| ApiError(StatusCode::NOT_FOUND, tr!("找不到匯出工作（可能已過期）", "Export job not found (it may have expired)")))
+}
+
+pub async fn export_job_status(
+    Path(job): Path<String>,
+    axum::Extension(user): axum::Extension<crate::auth::CurrentUser>,
+) -> ApiResult {
+    Ok(Json(json!(get_job(&job, &user)?)).into_response())
+}
+
+pub async fn export_job_download(
+    Path(job): Path<String>,
+    axum::Extension(user): axum::Extension<crate::auth::CurrentUser>,
+) -> ApiResult {
+    let j = get_job(&job, &user)?;
+    if j.state != "done" {
+        return Err(ApiError::bad(tr!("匯出尚未完成", "The export is not finished yet")));
+    }
+    let file = tokio::fs::File::open(&j.path).await.map_err(|e| ApiError::bad(e.to_string()))?;
+    let len = file.metadata().await.map(|m| m.len()).unwrap_or(0);
+    Ok((
+        [
+            (header::CONTENT_TYPE, "video/mp4".to_string()),
+            (header::CONTENT_LENGTH, len.to_string()),
+            (header::CONTENT_DISPOSITION, format!("attachment; filename=\"{}\"", j.name)),
+        ],
+        Body::from_stream(tokio_util::io::ReaderStream::new(file)),
+    )
+        .into_response())
+}
+
 /// 刪除 1 小時前的匯出暫存檔
 async fn cleanup_exports(dir: &std::path::Path) {
     let Ok(mut rd) = tokio::fs::read_dir(dir).await else { return };

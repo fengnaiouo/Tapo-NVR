@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: Build & test (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check web UI syntax
+        shell: pwsh
+        run: |
+          foreach ($f in Get-ChildItem web -Filter *.js) { node --check $f.FullName; if ($LASTEXITCODE) { exit 1 } }
+          node -e "const h=require('fs').readFileSync('docs/index.html','utf8');new Function(h.match(/<script>([\s\S]*)<\/script>/)[1])"
+
+      # 桌面版打包時會檢查附帶的 go2rtc / ffmpeg 是否存在；CI 只編譯不打包，放空檔即可
+      - name: Placeholder bundled binaries
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force bin | Out-Null
+          foreach ($f in 'bin/go2rtc.exe', 'bin/ffmpeg.exe') { if (-not (Test-Path $f)) { New-Item -ItemType File $f | Out-Null } }
+
+      - name: Unit tests
+        run: cargo test -p tapo-nvr --locked
+
+      - name: Build server and desktop app
+        run: cargo build -p tapo-nvr -p tapo-nvr-desktop --locked

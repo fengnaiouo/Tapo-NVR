@@ -17,6 +17,8 @@ mod recorder;
 mod recordings;
 mod secret;
 mod settings;
+mod status;
+mod users;
 pub mod store;
 mod tapo;
 mod webassets;
@@ -78,6 +80,7 @@ pub struct Inner {
     pub go2rtc_restart: Notify,
     pub shutdown: CancellationToken,
     pub exit_code: AtomicI32,
+    pub started_at: chrono::DateTime<chrono::Utc>,
     watchers: Mutex<HashMap<String, (CameraConfig, CancellationToken)>>,
     apply_lock: Mutex<()>,
 }
@@ -295,6 +298,7 @@ impl Server {
             go2rtc_restart: Notify::new(),
             shutdown: CancellationToken::new(),
             exit_code: AtomicI32::new(0),
+            started_at: chrono::Utc::now(),
             watchers: Mutex::new(HashMap::new()),
             apply_lock: Mutex::new(()),
             data_dir,
@@ -391,18 +395,29 @@ impl Server {
 }
 
 fn router(state: AppState, web_dir: Option<PathBuf>) -> Router {
-    let protected = Router::new()
+    let admin = || middleware::from_fn(auth::require_admin);
+    // 所有登入的使用者（含「僅觀看」）：觀看、回放、事件、匯出、雲台
+    let viewer = Router::new()
         .route("/api/me", get(auth::me))
+        .route("/api/me/password", post(auth::change_own_password))
         .route("/api/logout", post(auth::logout))
         .route("/api/auth/ticket", post(auth::create_ticket))
+        .route("/api/about", get(about::about))
         .route("/api/cameras", get(api::list_cameras))
         .route("/api/cameras/{id}/snapshot", get(api::snapshot))
         .route("/api/cameras/{id}/ptz/move", post(api::ptz_move))
         .route("/api/cameras/{id}/ptz/stop", post(api::ptz_stop))
-        .route("/api/cameras/{id}/presets", get(api::list_presets).post(api::save_preset))
+        // 同一路徑依方法區分權限：讀取開放，修改限管理員
+        .route(
+            "/api/cameras/{id}/presets",
+            get(api::list_presets).merge(post(api::save_preset).route_layer(admin())),
+        )
         .route("/api/cameras/{id}/presets/{token}/goto", post(api::goto_preset))
-        .route("/api/cameras/{id}/presets/{token}", delete(api::delete_preset))
-        .route("/api/cameras/{id}/device", get(api::device_status).put(api::device_update))
+        .route("/api/cameras/{id}/presets/{token}", delete(api::delete_preset).route_layer(admin()))
+        .route(
+            "/api/cameras/{id}/device",
+            get(api::device_status).merge(put(api::device_update).route_layer(admin())),
+        )
         .route("/api/events", get(api::list_events))
         .route("/api/snapshots/{file}", get(api::event_snapshot))
         .route("/api/ws", get(events::events_ws))
@@ -411,6 +426,14 @@ fn router(state: AppState, web_dir: Option<PathBuf>) -> Router {
         .route("/api/recordings/{id}/segments", get(recordings::segments))
         .route("/api/recordings/{id}/video/{date}/{file}", get(recordings::video))
         .route("/api/recordings/{id}/export", get(recordings::export))
+        .route("/api/recordings/{id}/export-jobs", post(recordings::create_export_job))
+        .route("/api/export-jobs/{job}", get(recordings::export_job_status))
+        .route("/api/export-jobs/{job}/download", get(recordings::export_job_download))
+        .route("/go2rtc/api/ws", get(go2rtc::ws_proxy))
+        .route("/go2rtc/{file}", get(go2rtc::player_js));
+
+    // 只限管理員：所有設定、攝影機管理、系統、使用者管理
+    let admin_only = Router::new()
         .route("/api/settings", get(settings::get_settings))
         .route("/api/settings/notify", put(settings::put_notify))
         .route("/api/settings/notify/test", post(notify::test))
@@ -429,14 +452,18 @@ fn router(state: AppState, web_dir: Option<PathBuf>) -> Router {
         )
         .route("/api/system/restart", post(settings::restart))
         .route("/api/system/logs", get(about::logs))
-        .route("/api/about", get(about::about))
+        .route("/api/status", get(status::status))
         .route("/api/about/check", post(about::check))
         .route("/api/settings/update", put(settings::put_update))
         .route("/api/settings/backup", get(about::backup))
         .route("/api/settings/restore", post(about::restore))
         .route("/api/notify/armed", put(settings::put_armed))
-        .route("/go2rtc/api/ws", get(go2rtc::ws_proxy))
-        .route("/go2rtc/{file}", get(go2rtc::player_js))
+        .route("/api/users", get(users::list).post(users::create))
+        .route("/api/users/{name}", put(users::update).delete(users::delete))
+        .route_layer(admin());
+
+    let protected = viewer
+        .merge(admin_only)
         .layer(middleware::from_fn_with_state(state.clone(), auth::require_auth));
 
     let mut app = Router::new()

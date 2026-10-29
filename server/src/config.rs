@@ -47,15 +47,51 @@ impl Default for ServerConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AuthConfig {
+    /// 主要管理員（首次設定時建立，無法刪除）
     pub username: String,
     /// 空字串代表尚未設定，伺服器會進入首次設定模式
     pub password_hash: String,
     pub session_days: i64,
+    /// 其他使用者（家人等）
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub users: Vec<UserAccount>,
 }
 
 impl Default for AuthConfig {
     fn default() -> Self {
-        Self { username: "admin".into(), password_hash: String::new(), session_days: 30 }
+        Self { username: "admin".into(), password_hash: String::new(), session_days: 30, users: Vec::new() }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum Role {
+    /// 所有功能，包含設定
+    Admin,
+    /// 只能觀看：即時影像、回放、事件、匯出；不能修改任何設定或控制攝影機
+    #[default]
+    Viewer,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserAccount {
+    pub username: String,
+    pub password_hash: String,
+    #[serde(default)]
+    pub role: Role,
+}
+
+impl AuthConfig {
+    /// 帳號的角色與密碼雜湊；主要管理員永遠是 Admin
+    pub fn find_user(&self, username: &str) -> Option<(Role, &str)> {
+        if username == self.username {
+            return Some((Role::Admin, self.password_hash.as_str()));
+        }
+        self.users.iter().find(|u| u.username == username).map(|u| (u.role, u.password_hash.as_str()))
+    }
+
+    pub fn role_of(&self, username: &str) -> Option<Role> {
+        self.find_user(username).map(|(r, _)| r)
     }
 }
 
@@ -121,29 +157,10 @@ pub struct NotifyConfig {
 impl NotifyConfig {
     /// 現在是否在通知時段內
     pub fn in_schedule(&self, now: chrono::DateTime<chrono::Local>) -> bool {
-        use chrono::{Datelike, Timelike};
-        if !self.schedule_enabled {
+        if !self.schedule_enabled || !valid_hhmm(&self.schedule_start) || !valid_hhmm(&self.schedule_end) {
             return true;
         }
-        let parse = |s: &str| -> Option<u32> {
-            let (h, m) = s.trim().split_once(':')?;
-            let (h, m) = (h.parse::<u32>().ok()?, m.parse::<u32>().ok()?);
-            (h < 24 && m < 60).then_some(h * 60 + m)
-        };
-        let (Some(start), Some(end)) = (parse(&self.schedule_start), parse(&self.schedule_end)) else { return true };
-        let minute = now.hour() * 60 + now.minute();
-        let today = now.weekday().num_days_from_sunday() as u8;
-        let yesterday = (today + 6) % 7;
-        if start == end {
-            return self.schedule_days.contains(&today);
-        }
-        if start < end {
-            self.schedule_days.contains(&today) && minute >= start && minute < end
-        } else {
-            // 跨夜：開始那天的晚上，或隔天清晨（以開始那天為準）
-            (minute >= start && self.schedule_days.contains(&today))
-                || (minute < end && self.schedule_days.contains(&yesterday))
-        }
+        time_in_range(&self.schedule_days, &self.schedule_start, &self.schedule_end, now)
     }
 }
 
@@ -254,6 +271,57 @@ pub struct CameraConfig {
     /// 機型（掃描或測試連線時自動填入，僅供顯示）
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub model: String,
+    /// MAC 位址（自動取得，格式 AABBCCDDEEFF）：IP 變動時用來在區網中找回攝影機
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub mac: String,
+    /// 錄影排程：依序比對，第一個符合目前時間的規則決定錄影模式；都不符合時用 record
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub schedule: Vec<ScheduleRule>,
+    /// 要推送通知的事件類型（motion、person、vehicle、pet…）；空白 = 全部
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notify_kinds: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ScheduleRule {
+    /// 0 = 星期日 … 6 = 星期六
+    pub days: Vec<u8>,
+    /// "HH:MM"；結束早於開始代表跨夜
+    pub start: String,
+    pub end: String,
+    pub mode: RecordMode,
+}
+
+/// 把 MAC 統一成 12 碼大寫十六進位（去掉 : - .）
+pub fn normalize_mac(mac: &str) -> String {
+    mac.chars().filter(|c| c.is_ascii_hexdigit()).map(|c| c.to_ascii_uppercase()).collect()
+}
+
+fn parse_hhmm(s: &str) -> Option<u32> {
+    let (h, m) = s.trim().split_once(':')?;
+    let (h, m) = (h.parse::<u32>().ok()?, m.parse::<u32>().ok()?);
+    (h < 24 && m < 60).then_some(h * 60 + m)
+}
+
+pub fn valid_hhmm(s: &str) -> bool {
+    s.split_once(':').is_some_and(|(_, m)| m.len() == 2) && parse_hhmm(s).is_some()
+}
+
+/// 指定的星期與時段是否包含 now（跨夜時段以開始那天為準）
+pub fn time_in_range(days: &[u8], start: &str, end: &str, now: chrono::DateTime<chrono::Local>) -> bool {
+    use chrono::{Datelike, Timelike};
+    let (Some(start), Some(end)) = (parse_hhmm(start), parse_hhmm(end)) else { return false };
+    let minute = now.hour() * 60 + now.minute();
+    let today = now.weekday().num_days_from_sunday() as u8;
+    let yesterday = (today + 6) % 7;
+    if start == end {
+        return days.contains(&today);
+    }
+    if start < end {
+        days.contains(&today) && minute >= start && minute < end
+    } else {
+        (minute >= start && days.contains(&today)) || (minute < end && days.contains(&yesterday))
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -275,6 +343,20 @@ fn yes() -> bool {
 }
 
 impl CameraConfig {
+    /// 依錄影排程決定某個時間點的錄影模式
+    pub fn record_mode_at(&self, now: chrono::DateTime<chrono::Local>) -> RecordMode {
+        self.schedule
+            .iter()
+            .find(|r| time_in_range(&r.days, &r.start, &r.end, now))
+            .map(|r| r.mode)
+            .unwrap_or(self.record)
+    }
+
+    /// 此事件類型是否要推送通知
+    pub fn wants_notify(&self, kind: &str) -> bool {
+        self.notify && (self.notify_kinds.is_empty() || self.notify_kinds.iter().any(|k| k == kind))
+    }
+
     pub fn main_stream(&self) -> String {
         format!("{}_main", self.id)
     }
@@ -348,6 +430,29 @@ impl Config {
         }
         if self.auth.username.trim().is_empty() {
             bail!("{}", tr!("登入帳號不可空白", "Username cannot be empty"));
+        }
+        let mut names = std::collections::HashSet::new();
+        names.insert(self.auth.username.as_str());
+        for u in &self.auth.users {
+            if u.username.trim().is_empty() || u.username.chars().count() > 32 {
+                bail!("{}", tr!("帳號需為 1–32 字", "Username must be 1–32 characters"));
+            }
+            if !names.insert(u.username.as_str()) {
+                bail!("{}", tr!("帳號 `{}` 重複", "Username `{}` already exists", u.username));
+            }
+            if !u.password_hash.starts_with("$argon2") {
+                bail!("{}", tr!("使用者 `{}` 的密碼格式錯誤", "Invalid password for user `{}`", u.username));
+            }
+        }
+        for cam in &self.cameras {
+            for r in &cam.schedule {
+                if !valid_hhmm(&r.start) || !valid_hhmm(&r.end) {
+                    bail!("{}", tr!("「{}」的錄影排程時間格式錯誤，例如 08:00", "Invalid recording schedule time for \"{}\", e.g. 08:00", cam.name));
+                }
+                if r.days.is_empty() || r.days.iter().any(|d| *d > 6) {
+                    bail!("{}", tr!("「{}」的錄影排程至少要選一天", "Select at least one day in the recording schedule of \"{}\"", cam.name));
+                }
+            }
         }
         if !(1..=3650).contains(&self.auth.session_days) {
             bail!("{}", tr!("登入有效天數需介於 1–3650", "Session days must be between 1 and 3650"));
@@ -455,5 +560,59 @@ mod tests {
         assert!(!n.in_schedule(at(2026, 11, 2, 18, 0)));
         n.schedule_enabled = false;
         assert!(n.in_schedule(at(2026, 11, 3, 3, 0)));
+    }
+
+    fn cam() -> super::CameraConfig {
+        super::CameraConfig {
+            id: "c".into(),
+            name: "c".into(),
+            host: "1.2.3.4".into(),
+            username: String::new(),
+            password: String::new(),
+            rtsp_port: 554,
+            onvif_port: 2020,
+            ptz: false,
+            motion: true,
+            notify: true,
+            record: super::RecordMode::Events,
+            cloud_password: String::new(),
+            stream: Default::default(),
+            model: String::new(),
+            mac: String::new(),
+            schedule: Vec::new(),
+            notify_kinds: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn record_schedule() {
+        use super::{RecordMode, ScheduleRule};
+        let mut c = cam();
+        // 平日 08:00–18:00 不錄；每天 22:00–06:00 連續錄影；其他時間事件錄影
+        c.schedule = vec![
+            ScheduleRule { days: vec![1, 2, 3, 4, 5], start: "08:00".into(), end: "18:00".into(), mode: RecordMode::Off },
+            ScheduleRule { days: vec![0, 1, 2, 3, 4, 5, 6], start: "22:00".into(), end: "06:00".into(), mode: RecordMode::Continuous },
+        ];
+        assert_eq!(c.record_mode_at(at(2026, 11, 2, 9, 0)), RecordMode::Off); // 週一上班時間
+        assert_eq!(c.record_mode_at(at(2026, 11, 1, 9, 0)), RecordMode::Events); // 週日白天
+        assert_eq!(c.record_mode_at(at(2026, 11, 2, 23, 0)), RecordMode::Continuous);
+        assert_eq!(c.record_mode_at(at(2026, 11, 3, 5, 59)), RecordMode::Continuous); // 跨夜
+        assert_eq!(c.record_mode_at(at(2026, 11, 3, 19, 0)), RecordMode::Events);
+    }
+
+    #[test]
+    fn notify_kinds() {
+        let mut c = cam();
+        assert!(c.wants_notify("motion") && c.wants_notify("person"));
+        c.notify_kinds = vec!["person".into(), "vehicle".into()];
+        assert!(c.wants_notify("person") && !c.wants_notify("motion"));
+        c.notify = false;
+        assert!(!c.wants_notify("person"));
+    }
+
+    #[test]
+    fn mac_normalize() {
+        assert_eq!(super::normalize_mac("10:5a:95:7d:58:d1"), "105A957D58D1");
+        assert_eq!(super::normalize_mac("10-5A-95-7D-58-D1"), "105A957D58D1");
     }
 }

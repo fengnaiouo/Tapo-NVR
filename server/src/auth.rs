@@ -32,6 +32,13 @@ pub struct Auth {
 pub struct CurrentUser {
     pub username: String,
     pub token: String,
+    pub role: crate::config::Role,
+}
+
+impl CurrentUser {
+    pub fn is_admin(&self) -> bool {
+        self.role == crate::config::Role::Admin
+    }
 }
 
 impl Auth {
@@ -63,14 +70,20 @@ impl Auth {
         ticket
     }
 
-    /// 變更密碼後讓其他裝置全部登出，只保留目前這個 Session
-    pub async fn revoke_others(&self, keep: &str) {
-        let _ = self.store.delete_sessions_except(keep);
+    /// 變更密碼後讓這位使用者的其他裝置全部登出，只保留目前這個 Session
+    pub async fn revoke_others(&self, username: &str, keep: &str) {
+        let _ = self.store.delete_user_sessions_except(username, keep);
         self.tickets.lock().await.clear();
     }
 
-    pub async fn rename_user(&self, username: &str) {
-        let _ = self.store.rename_sessions(username);
+    /// 登出某位使用者的所有裝置
+    pub async fn revoke_user(&self, username: &str) {
+        let _ = self.store.delete_user_sessions(username);
+        self.tickets.lock().await.clear();
+    }
+
+    pub async fn rename_user(&self, old: &str, new: &str) {
+        let _ = self.store.rename_sessions(old, new);
     }
 
     async fn revoke(&self, token: &str) {
@@ -188,10 +201,23 @@ pub async fn require_auth(State(state): State<AppState>, mut req: Request, next:
     };
     match state.auth.validate(&token).await {
         Some(username) => {
-            req.extensions_mut().insert(CurrentUser { username, token });
+            // 帳號被刪除後 Session 立即失效；角色每次從目前設定讀取，改權限立刻生效
+            let Some(role) = state.cfg().auth.role_of(&username) else {
+                return (StatusCode::UNAUTHORIZED, Json(json!({"error": tr!("登入已過期", "Session expired")}))).into_response();
+            };
+            req.extensions_mut().insert(CurrentUser { username, token, role });
             next.run(req).await
         }
         None => (StatusCode::UNAUTHORIZED, Json(json!({"error": tr!("登入已過期", "Session expired")}))).into_response(),
+    }
+}
+
+/// 只允許管理員（設定、攝影機控制、使用者管理等）；放在 require_auth 之後
+pub async fn require_admin(req: Request, next: Next) -> Response {
+    match req.extensions().get::<CurrentUser>() {
+        Some(u) if u.is_admin() => next.run(req).await,
+        _ => (StatusCode::FORBIDDEN, Json(json!({"error": tr!("需要管理員權限", "Administrator permission required"), "admin_required": true})))
+            .into_response(),
     }
 }
 
@@ -230,12 +256,19 @@ pub async fn login(
         }
     }
 
-    let hash = state.cfg().auth.password_hash.clone();
+    // 主要管理員與其他使用者都可登入；帳號不存在時仍做一次雜湊比對，避免從回應時間猜出帳號
+    let hash = state
+        .cfg()
+        .auth
+        .find_user(&body.username)
+        .map(|(_, h)| h.to_string())
+        .unwrap_or_else(|| state.cfg().auth.password_hash.clone());
+    let known = state.cfg().auth.find_user(&body.username).is_some();
     let password = body.password.clone();
     let pw_ok = tokio::task::spawn_blocking(move || verify_password(&password, &hash))
         .await
         .unwrap_or(false);
-    let ok = pw_ok && body.username == state.cfg().auth.username;
+    let ok = pw_ok && known;
 
     if !ok {
         let mut f = state.auth.failures.lock().await;
@@ -269,8 +302,56 @@ pub async fn logout(
         .into_response()
 }
 
-pub async fn me(axum::Extension(user): axum::Extension<CurrentUser>) -> Json<serde_json::Value> {
-    Json(json!({"username": user.username}))
+pub async fn me(State(state): State<AppState>, axum::Extension(user): axum::Extension<CurrentUser>) -> Json<serde_json::Value> {
+    let primary = user.username == state.cfg().auth.username;
+    Json(json!({"username": user.username, "role": user.role, "admin": user.is_admin(), "primary": primary}))
+}
+
+#[derive(Deserialize)]
+pub struct ChangePasswordReq {
+    current_password: String,
+    new_password: String,
+}
+
+/// 任何使用者都可以修改自己的密碼（變更後登出自己的其他裝置）
+pub async fn change_own_password(
+    State(state): State<AppState>,
+    axum::Extension(user): axum::Extension<CurrentUser>,
+    Json(r): Json<ChangePasswordReq>,
+) -> Response {
+    let err = |code: StatusCode, msg: String| (code, Json(json!({"error": msg}))).into_response();
+    let Some((_, hash)) = state.cfg().auth.find_user(&user.username).map(|(r, h)| (r, h.to_string())) else {
+        return err(StatusCode::UNAUTHORIZED, tr!("登入已過期", "Session expired"));
+    };
+    let current = r.current_password.clone();
+    if !tokio::task::spawn_blocking(move || verify_password(&current, &hash)).await.unwrap_or(false) {
+        return err(StatusCode::FORBIDDEN, tr!("目前密碼錯誤", "Current password is wrong"));
+    }
+    if r.new_password.chars().count() < 8 {
+        return err(StatusCode::BAD_REQUEST, tr!("新密碼至少 8 個字元", "New password must be at least 8 characters"));
+    }
+    let pw = r.new_password.clone();
+    let new_hash = match tokio::task::spawn_blocking(move || hash_password(&pw)).await {
+        Ok(Ok(h)) => h,
+        _ => return err(StatusCode::INTERNAL_SERVER_ERROR, tr!("無法產生密碼雜湊", "Cannot hash password")),
+    };
+    let name = user.username.clone();
+    let result = state
+        .update_config(move |c| {
+            if c.auth.username == name {
+                c.auth.password_hash = new_hash;
+            } else if let Some(u) = c.auth.users.iter_mut().find(|u| u.username == name) {
+                u.password_hash = new_hash;
+            }
+            Ok(())
+        })
+        .await;
+    if let Err(e) = result {
+        return err(StatusCode::BAD_REQUEST, e.to_string());
+    }
+    state.auth.revoke_others(&user.username, &user.token).await;
+    tracing::info!("使用者 {} 已變更密碼", user.username);
+    Json(json!({"ok": true})).into_response()
 }
 
 /// 桌面版：用 Bearer token 換一次性票證，讓 WebView 以 /auth/consume 取得 Cookie

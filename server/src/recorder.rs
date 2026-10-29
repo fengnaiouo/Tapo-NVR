@@ -58,7 +58,9 @@ pub async fn sync(state: &AppState) {
     let root = cfg.recording.root();
     let mut wanted: HashMap<String, RecKey> = HashMap::new();
     if let Some(root) = root {
-        for cam in cfg.cameras.iter().filter(|c| c.record != RecordMode::Off) {
+        // 依錄影排程決定目前要不要錄；連續與事件模式都是持續錄影（事件模式事後修剪），切換時不需重啟
+        let now = Local::now();
+        for cam in cfg.cameras.iter().filter(|c| c.record_mode_at(now) != RecordMode::Off) {
             wanted.insert(
                 cam.id.clone(),
                 RecKey {
@@ -331,6 +333,10 @@ pub async fn retention_loop(state: AppState) {
             _ = state.shutdown.cancelled() => return,
         }
         tick += 1;
+        // 每分鐘依錄影排程啟動 / 停止錄影
+        if tick % 4 == 0 {
+            sync(&state).await;
+        }
         let Some(root) = state.cfg().recording.root() else { continue };
         let ffmpeg = state.ffmpeg_bin.clone();
         let r = root.clone();
@@ -409,8 +415,8 @@ struct RetentionJob {
     max_bytes: u64,
     pre: i64,
     post: i64,
-    /// 事件模式攝影機 → 需保留的時間區間
-    event_cams: HashMap<String, Vec<(DateTime<Utc>, DateTime<Utc>)>>,
+    /// 可能使用事件模式的攝影機 → (設定, 需保留的時間區間)
+    event_cams: HashMap<String, (CameraConfig, Vec<(DateTime<Utc>, DateTime<Utc>)>)>,
 }
 
 async fn prepare_job(state: &AppState, root: PathBuf) -> RetentionJob {
@@ -419,8 +425,10 @@ async fn prepare_job(state: &AppState, root: PathBuf) -> RetentionJob {
     // 清理只處理最近 2 小時內的片段，往前多取一些涵蓋事件前後保留秒數
     let to = Utc::now();
     let from = to - chrono::Duration::hours(3);
-    for cam in cfg.cameras.iter().filter(|c| c.record == RecordMode::Events) {
-        event_cams.insert(cam.id.clone(), state.events.keep_ranges(&cam.id, from, to));
+    let uses_events =
+        |c: &CameraConfig| c.record == RecordMode::Events || c.schedule.iter().any(|r| r.mode == RecordMode::Events);
+    for cam in cfg.cameras.iter().filter(|c| uses_events(c)) {
+        event_cams.insert(cam.id.clone(), (cam.clone(), state.events.keep_ranges(&cam.id, from, to)));
     }
     RetentionJob {
         root,
@@ -439,11 +447,15 @@ impl RetentionJob {
 
         // 1. 事件模式：刪除最近 2 小時內、已寫完且與任何移動區間都不重疊的片段
         let settle = chrono::Duration::seconds(self.post + 90);
-        for (cam, ranges) in &self.event_cams {
+        for (cam, (cam_cfg, ranges)) in &self.event_cams {
             for day in list_days(&self.root, cam).iter().rev().take(2) {
                 for seg in list_day(&self.root, cam, day) {
                     let age = now - seg.end;
                     if age < settle || age > chrono::Duration::hours(2) {
+                        continue;
+                    }
+                    // 錄影排程：只有錄製當時為「事件模式」的片段才修剪
+                    if cam_cfg.record_mode_at(seg.start) != RecordMode::Events {
                         continue;
                     }
                     let (s, e) = (seg.start.with_timezone(&Utc), seg.end.with_timezone(&Utc));

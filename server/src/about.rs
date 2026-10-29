@@ -144,6 +144,7 @@ pub async fn logs(Query(q): Query<LogQuery>) -> Json<Value> {
 pub async fn backup(State(state): State<AppState>) -> Response {
     let mut cfg = (*state.cfg()).clone();
     cfg.auth.password_hash.clear();
+    cfg.auth.users.clear();
     cfg.notify.ntfy_token.clear();
     for c in &mut cfg.cameras {
         c.password.clear();

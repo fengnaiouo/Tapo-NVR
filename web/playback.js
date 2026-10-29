@@ -1,11 +1,20 @@
 const $ = (s) => document.querySelector(s);
-const KIND_KEYS = {motion: '移動偵測', person: '偵測到人形', tamper: '鏡頭遭遮蔽', offline: '攝影機離線', online: '攝影機恢復連線'};
+const KIND_KEYS = {
+  motion: '移動偵測', person: '偵測到人形', vehicle: '偵測到車輛', pet: '偵測到寵物', babycry: '偵測到嬰兒哭聲',
+  linecross: '越線偵測', intrusion: '區域入侵', tamper: '鏡頭遭遮蔽', offline: '攝影機離線', online: '攝影機恢復連線',
+  ip_changed: '攝影機 IP 已更新',
+};
 const kindLabel = (k) => t(KIND_KEYS[k] || k);
 const HOUR = 3600e3;
 const DAY = 24 * HOUR;
+const MAX_EXPORT = 6 * HOUR;
+let exporting = false;
 
-async function api(path) {
-  const r = await fetch(path, {headers: i18n.headers()});
+async function api(path, opts = {}) {
+  const r = await fetch(path, {
+    ...opts,
+    headers: {...i18n.headers(), ...(opts.body ? {'Content-Type': 'application/json'} : {})},
+  });
   const data = r.headers.get('content-type')?.includes('json') ? await r.json() : null;
   if (r.status === 401) {
     location.href = data?.setup ? '/setup.html' : '/login.html';
@@ -320,7 +329,7 @@ function updateRange() {
   $('#range').textContent = has
     ? t('{a} – {b}（{n} 秒）', {a: fmtTime(st.markIn), b: fmtTime(st.markOut), n: Math.round((st.markOut - st.markIn) / 1000)})
     : st.markIn != null ? `${fmtTime(st.markIn)} – ?` : t('未選取');
-  $('#btn-export').disabled = !(has && st.markOut > st.markIn && st.markOut - st.markIn <= 2 * HOUR);
+  $('#btn-export').disabled = exporting || !(has && st.markOut > st.markIn && st.markOut - st.markIn <= MAX_EXPORT);
   if (!has) {
     r.hidden = true;
     return;
@@ -450,16 +459,39 @@ $('#btn-mark-out').onclick = () => {
   if (st.markIn == null || st.markIn >= st.markOut) st.markIn = Math.max(st.markOut - 60e3, dayStartOf(st.date));
   updateRange();
 };
-$('#btn-export').onclick = () => {
-  const q = new URLSearchParams({
-    start: new Date(st.markIn).toISOString(),
-    end: new Date(st.markOut).toISOString(),
-  });
-  const a = document.createElement('a');
-  a.href = `/api/recordings/${st.camera}/export?${q}`;
-  a.download = '';
-  a.click();
-  toast('匯出中，完成後會自動下載…');
+// 背景匯出：建立工作 → 每秒查詢進度 → 完成後下載（長片段也不會讓請求逾時）
+$('#btn-export').onclick = async () => {
+  const btn = $('#btn-export');
+  const label = btn.textContent;
+  exporting = true;
+  btn.disabled = true;
+  btn.textContent = t('準備匯出…');
+  try {
+    const {job} = await api(`/api/recordings/${st.camera}/export-jobs`, {
+      method: 'POST',
+      body: JSON.stringify({start: new Date(st.markIn).toISOString(), end: new Date(st.markOut).toISOString()}),
+    });
+    for (;;) {
+      await new Promise((r) => setTimeout(r, 1000));
+      const s = await api(`/api/export-jobs/${job}`);
+      if (s.state === 'error') throw new Error(s.error || t('匯出失敗'));
+      if (s.state === 'done') {
+        const a = document.createElement('a');
+        a.href = `/api/export-jobs/${job}/download`;
+        a.download = s.name;
+        a.click();
+        toast(t('匯出完成（{size}），開始下載', {size: `${(s.size / 1048576).toFixed(1)} MB`}));
+        break;
+      }
+      btn.textContent = t('匯出中 {p}%', {p: s.progress});
+    }
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    exporting = false;
+    btn.textContent = label;
+    updateRange();
+  }
 };
 
 document.addEventListener('keydown', (e) => {
