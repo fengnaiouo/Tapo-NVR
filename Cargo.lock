@@ -4790,7 +4790,7 @@ dependencies = [
 
 [[package]]
 name = "tapo-nvr"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "aes",
  "anyhow",
@@ -4834,7 +4834,7 @@ dependencies = [
 
 [[package]]
 name = "tapo-nvr-desktop"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "chrono",
  "futures-util",

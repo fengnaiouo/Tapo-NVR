@@ -111,8 +111,15 @@
         <label class="row"><input id="zoom" type="range" min="1" max="4" step="0.1" value="1"> <span id="zoom-val">1.0×</span></label>
         <p class="hint">滑鼠滾輪縮放、拖曳平移、雙擊還原</p>
       </section>
+      <section>
+        <h3>音量</h3>
+        <div class="row volume-row">
+          <button id="btn-audio" title="靜音 / 取消靜音（M）">🔇</button>
+          <input id="volume" type="range" min="0" max="100" step="1" value="80" title="音量（滑鼠滾輪可調整）">
+          <span id="volume-val" class="volume-val" data-no-i18n>80%</span>
+        </div>
+      </section>
       <section class="row wrap">
-        <button id="btn-audio">🔇 聲音</button>
         <button id="btn-talk" hidden title="需要在攝影機設定填入 TP-Link 雲端密碼">🎙 對講</button>
         <button id="btn-snapshot">📷 截圖</button>
         <button id="btn-playback">⏪ 回放</button>

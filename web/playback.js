@@ -48,6 +48,9 @@ const st = {
 };
 
 const video = $('#video');
+// 記住回放音量（與監控畫面分開保存）；預設靜音，按播放器的喇叭圖示即可開聲音
+video.volume = Math.min(1, Math.max(0, Number(localStorage.getItem('playbackVolume') ?? 0.8)));
+video.addEventListener('volumechange', () => localStorage.setItem('playbackVolume', String(video.volume)));
 
 // ---------- 載入 ----------
 async function init() {

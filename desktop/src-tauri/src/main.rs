@@ -738,9 +738,15 @@ fn update_install(app: &AppHandle) {
             }
         };
         set_banner(&h, Some(progress(100, tr!("正在安裝，程式即將重新啟動…", "Installing, the app will restart…"))));
-        // 安裝前先停止伺服器與錄影，讓目前的片段正常收尾
+        // 安裝前先停止伺服器與錄影，讓目前的片段正常收尾（go2rtc / ffmpeg 也會結束）
         stop_local(&h).await;
+        // 更新程式啟動安裝程式後會立刻結束本程式；安裝程式與本程式在同一個 Job Object，
+        // 必須先解除「關閉時終止所有子程序」，否則安裝程式會被一起終止，更新永遠不會套用
+        tapo_nvr::release_children_on_exit();
+        tracing::info!("開始安裝更新 {version}");
         if let Err(e) = update.install(bytes) {
+            tracing::error!("安裝更新失敗：{e}");
+            tapo_nvr::kill_children_on_exit();
             h.state::<AppState>().update_installing.store(false, Ordering::SeqCst);
             set_banner(
                 &h,

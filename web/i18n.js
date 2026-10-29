@@ -439,7 +439,11 @@
     "通知已暫停，按一下布防（恢復通知）": "Notifications are paused. Click to arm (resume notifications)",
     "已布防，恢復通知": "Armed, notifications resumed",
     "已撤防，暫停通知（仍會錄影與記錄事件）": "Disarmed, notifications paused (recording and events continue)",
-    "有新版本 v{v}，請到設定 → 更新與關於": "Version v{v} is available, see Settings → Updates & about"
+    "有新版本 v{v}，請到設定 → 更新與關於": "Version v{v} is available, see Settings → Updates & about",
+    "音量": "Volume",
+    "靜音": "Muted",
+    "靜音 / 取消靜音（M）": "Mute / unmute (M)",
+    "音量（滑鼠滾輪可調整）": "Volume (mouse wheel adjusts)"
   }/*END*/;
 
   const LOCALES = {'zh-TW': 'zh-TW', 'zh-CN': 'zh-CN', en: 'en-US'};

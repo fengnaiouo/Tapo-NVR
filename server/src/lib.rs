@@ -506,16 +506,23 @@ pub fn import_toml(data_dir: &Path, path: &Path) -> Result<usize> {
     Ok(cfg.cameras.len())
 }
 
+#[cfg(windows)]
+static JOB: std::sync::atomic::AtomicPtr<std::ffi::c_void> = std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
+
 /// 把自己放進「關閉時終止所有子程序」的 Job Object，程式被強制關閉時 go2rtc / ffmpeg 也會一起結束
 #[cfg(windows)]
 pub fn kill_children_on_exit() {
     use windows_sys::Win32::System::JobObjects::*;
     use windows_sys::Win32::System::Threading::GetCurrentProcess;
     unsafe {
-        let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
+        // 已建立過（例如更新安裝失敗後恢復）：只重新設定限制
+        let existing = JOB.load(std::sync::atomic::Ordering::SeqCst);
+        let fresh = existing.is_null();
+        let job = if fresh { CreateJobObjectW(std::ptr::null(), std::ptr::null()) } else { existing };
         if job.is_null() {
             return;
         }
+        JOB.store(job, std::sync::atomic::Ordering::SeqCst);
         let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
         info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
         SetInformationJobObject(
@@ -524,13 +531,43 @@ pub fn kill_children_on_exit() {
             &info as *const _ as *const _,
             std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
         );
-        AssignProcessToJobObject(job, GetCurrentProcess());
+        if fresh {
+            AssignProcessToJobObject(job, GetCurrentProcess());
+        }
         // 刻意不關閉 handle：程序結束時由系統關閉，觸發 KILL_ON_JOB_CLOSE
     }
 }
 
 #[cfg(not(windows))]
 pub fn kill_children_on_exit() {}
+
+/// 解除「關閉時終止所有子程序」。自動更新時必須先呼叫：
+/// 更新程式會啟動安裝程式後立刻結束本程式，安裝程式也在同一個 Job 裡，不解除就會被一起終止。
+#[cfg(windows)]
+pub fn release_children_on_exit() {
+    use windows_sys::Win32::System::JobObjects::*;
+    let job = JOB.load(std::sync::atomic::Ordering::SeqCst);
+    if job.is_null() {
+        return;
+    }
+    unsafe {
+        let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
+        // 允許之後啟動的子程序脫離 Job，且關閉時不再終止成員
+        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK;
+        let ok = SetInformationJobObject(
+            job,
+            JobObjectExtendedLimitInformation,
+            &info as *const _ as *const _,
+            std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+        );
+        if ok == 0 {
+            tracing::warn!("無法解除 Job Object 限制：{}", std::io::Error::last_os_error());
+        }
+    }
+}
+
+#[cfg(not(windows))]
+pub fn release_children_on_exit() {}
 
 /// 磁碟剩餘空間（位元組）
 pub fn free_space(path: &Path) -> Option<u64> {

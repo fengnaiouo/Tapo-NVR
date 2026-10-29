@@ -269,6 +269,45 @@ function downloadSnapshot(cam) {
   a.click();
 }
 
+// ---------- 音量（放大檢視的主串流） ----------
+// 音量與靜音狀態記在此裝置；瀏覽器限制自動播放聲音，所以只有桌面版會自動恢復「開聲音」
+const audio = {
+  volume: Math.min(1, Math.max(0, Number(localStorage.getItem('volume') ?? 0.8))),
+  muted: !(isDesktopClient() && localStorage.getItem('audioOn') === '1'),
+};
+function isDesktopClient() {
+  return localStorage.getItem('client') === 'desktop';
+}
+function setAudio(patch) {
+  Object.assign(audio, patch);
+  audio.volume = Math.round(Math.min(1, Math.max(0, audio.volume)) * 100) / 100;
+  if (audio.volume === 0) audio.muted = true;
+  localStorage.setItem('volume', String(audio.volume));
+  localStorage.setItem('audioOn', audio.muted ? '0' : '1');
+  applyAudio();
+}
+function applyAudio() {
+  const pct = Math.round(audio.volume * 100);
+  $('#volume').value = pct;
+  $('#volume-val').textContent = audio.muted ? t('靜音') : `${pct}%`;
+  $('#btn-audio').textContent = audio.muted || pct === 0 ? '🔇' : pct < 50 ? '🔉' : '🔊';
+  const player = zoom.el;
+  if (!player) return;
+  // 播放器的 <video> 在加入畫面後才建立；新串流接上時也要重新套用
+  const apply = () => {
+    const v = player.video;
+    if (!v) return;
+    v.volume = audio.volume;
+    v.muted = audio.muted;
+  };
+  apply();
+  if (!player.dataset.audioHooked) {
+    player.dataset.audioHooked = '1';
+    player.addEventListener('streammode', apply);
+    player.video?.addEventListener('playing', apply);
+  }
+}
+
 // ---------- 放大檢視 / 雲台 ----------
 const zoom = {scale: 1, x: 0, y: 0, el: null};
 
@@ -282,7 +321,7 @@ function openFocus(cam) {
   vp.appendChild(player);
   zoom.el = player;
   setZoom(1, 0, 0);
-  $('#btn-audio').textContent = '🔇 聲音';
+  applyAudio();
   stopTalk();
   $('#btn-talk').hidden = !cam.talk_stream;
   $('#ptz-section').hidden = !cam.ptz;
@@ -757,12 +796,17 @@ async function main() {
 
   $('#btn-focus-close').onclick = closeFocus;
   $('#btn-snapshot').onclick = () => state.focus && downloadSnapshot(state.focus);
-  $('#btn-audio').onclick = () => {
-    const v = zoom.el?.video;
-    if (!v) return;
-    v.muted = !v.muted;
-    $('#btn-audio').textContent = v.muted ? '🔇 聲音' : '🔊 聲音';
-  };
+  $('#btn-audio').onclick = () => setAudio({muted: !audio.muted});
+  $('#volume').oninput = (e) => setAudio({volume: Number(e.target.value) / 100, muted: false});
+  $('#volume').addEventListener('wheel', (e) => {
+    e.preventDefault();
+    setAudio({volume: audio.volume + (e.deltaY < 0 ? 0.05 : -0.05), muted: false});
+  }, {passive: false});
+  document.addEventListener('keydown', (e) => {
+    if (!state.focus || e.ctrlKey || e.altKey || e.metaKey) return;
+    if (e.target.closest?.('input, textarea, select')) return;
+    if (e.key === 'm' || e.key === 'M') setAudio({muted: !audio.muted});
+  });
   $('#btn-fullscreen').onclick = toggleFullscreen;
   $('#btn-talk').onclick = () => (talkEl ? stopTalk() : startTalk());
   $('#btn-playback').onclick = () => state.focus && openPlayback(state.focus.id);

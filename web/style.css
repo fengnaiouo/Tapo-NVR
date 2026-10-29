@@ -473,3 +473,7 @@ button.disarmed { border-color: #b45309; color: #fbbf24; }
   background: rgba(10, 12, 16, .82); color: #fca5a5; font-weight: 600; z-index: 3; pointer-events: none; text-align: center; padding: 12px;
 }
 .offline-cover small { color: var(--muted); font-weight: normal; max-width: 90%; word-break: break-word; }
+/* ---- 音量 ---- */
+.volume-row { align-items: center; gap: 8px; }
+.volume-row input[type=range] { flex: 1; min-width: 80px; }
+.volume-val { min-width: 42px; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12px; }
