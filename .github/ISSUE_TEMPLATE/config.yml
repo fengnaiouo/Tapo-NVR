@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 🔒 Security vulnerability / 安全性弱點
+    url: https://github.com/fengnaiouo/Tapo-NVR/security/advisories/new
+    about: Report privately, please do not open a public issue / 請私下回報，不要公開建立 Issue
+  - name: 📖 Website & getting started / 官網與使用說明
+    url: https://fengnaiouo.github.io/Tapo-NVR/
+    about: Installation, setup steps and FAQ / 安裝、設定步驟與常見問題
+  - name: ⬇️ Latest release / 最新版本
+    url: https://github.com/fengnaiouo/Tapo-NVR/releases/latest
+    about: Many problems are already fixed in the latest version / 許多問題在最新版已修正

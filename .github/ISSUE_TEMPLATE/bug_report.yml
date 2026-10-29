@@ -1,0 +1,124 @@
+name: 🐛 Bug report / 問題回報
+description: Something doesn't work as expected / 功能異常或錯誤
+title: "[Bug] "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Please fill in as much as you can.
+        感謝回報！請盡量填寫，越詳細越容易找到原因。
+
+        > ⚠️ **Never post passwords** (camera account, TP-Link account, ntfy token). Check logs and screenshots before posting.
+        > ⚠️ **請勿貼上任何密碼**（攝影機帳戶、TP-Link 帳號、ntfy 權杖），貼上記錄與截圖前請先檢查。
+        >
+        > Security issues? Please use [private vulnerability reporting](https://github.com/fengnaiouo/Tapo-NVR/security/advisories/new) instead.
+        > 安全性問題請改用[私密弱點回報](https://github.com/fengnaiouo/Tapo-NVR/security/advisories/new)。
+
+  - type: input
+    id: version
+    attributes:
+      label: Tapo NVR version / 版本
+      description: Settings → Updates & about, or the version at the top right of the live view / 設定 →「更新與關於」，或監控首頁右上角
+      placeholder: "0.4.3"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: How do you run it? / 執行方式
+      options:
+        - Desktop app / 桌面版
+        - Desktop app, connected to another PC / 桌面版（連線到其他電腦）
+        - Standalone server / 獨立伺服器
+        - Web browser / 網頁版（瀏覽器）
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area / 相關功能
+      multiple: true
+      options:
+        - Live view / 即時影像
+        - PTZ & presets / 雲台與預設點
+        - Camera controls (privacy, night vision…) / 攝影機控制（隱私、夜視…）
+        - Recording / 錄影
+        - Playback & export / 回放與匯出
+        - Motion detection / 移動偵測
+        - Notifications (Windows, browser, ntfy) / 通知
+        - Two-way audio / 雙向語音
+        - Camera discovery / 攝影機掃描
+        - Settings / 設定
+        - Sign-in & security / 登入與安全
+        - Auto-update & installer / 自動更新與安裝
+        - Remote access (Cloudflare Tunnel) / 外網連線
+        - Other / 其他
+    validations:
+      required: true
+
+  - type: input
+    id: camera
+    attributes:
+      label: Camera model, hardware & firmware / 攝影機型號、硬體與韌體版本
+      description: Tapo app → camera → Settings → Device info / Tapo App → 攝影機 → 設定 → 裝置資訊
+      placeholder: "C210, hardware 3.0, firmware 1.2.7"
+
+  - type: input
+    id: os
+    attributes:
+      label: OS & browser / 作業系統與瀏覽器
+      placeholder: "Windows 11 24H2 / Chrome 130"
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened? / 發生了什麼事？
+      description: Include any error messages / 請附上畫面上的錯誤訊息
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce / 重現步驟
+      placeholder: |
+        1. Open ... / 打開 ...
+        2. Click ... / 按下 ...
+        3. See error / 出現錯誤
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior / 預期結果
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / 系統記錄
+      description: |
+        Settings → System & logs → System log → "Warnings and errors only" → Copy.
+        設定 →「系統與記錄」→ 系統記錄 →「只看警告與錯誤」→ 複製。
+        Desktop log file / 桌面版記錄檔：`%LOCALAPPDATA%\com.tapo-nvr.desktop\logs\tapo-nvr.log`
+      render: text
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots / 截圖
+      description: Drag and drop images here / 可直接拖曳圖片
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist / 確認事項
+      options:
+        - label: I searched existing issues / 我已搜尋過現有的 Issue
+          required: true
+        - label: I removed all passwords and tokens from logs and screenshots / 我已移除記錄與截圖中的密碼與權杖
+          required: true
+        - label: I'm using the latest version / 我使用的是最新版本

@@ -1,0 +1,74 @@
+name: 📷 Camera compatibility / 攝影機相容性回報
+description: Tell us how Tapo NVR works with your camera model / 回報你的攝影機型號在 Tapo NVR 上的支援狀況
+title: "[Camera] "
+labels: ["camera-compat"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Reports for both working and non-working models help everyone. Thank you!
+        不論能不能用，回報都能幫助其他使用者，謝謝！
+
+  - type: input
+    id: model
+    attributes:
+      label: Camera model / 攝影機型號
+      placeholder: "C210"
+    validations:
+      required: true
+
+  - type: input
+    id: hardware
+    attributes:
+      label: Hardware version / 硬體版本
+      placeholder: "3.0"
+
+  - type: input
+    id: firmware
+    attributes:
+      label: Firmware version / 韌體版本
+      placeholder: "1.2.7 Build 240919"
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Tapo NVR version / Tapo NVR 版本
+      placeholder: "0.4.3"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: stream
+    attributes:
+      label: Stream source / 影像來源
+      options:
+        - RTSP (camera account) / RTSP（攝影機帳戶）
+        - Tapo private stream / Tapo 私有串流
+        - Not sure / 不確定
+
+  - type: checkboxes
+    id: works
+    attributes:
+      label: What works? / 哪些功能正常？
+      options:
+        - label: Found by LAN scan / 掃描區網可找到
+        - label: Live view / 即時影像
+        - label: Audio / 聲音
+        - label: Recording & playback / 錄影與回放
+        - label: Motion detection (ONVIF events) / 移動偵測
+        - label: Person detection / 人形偵測
+        - label: PTZ / 雲台
+        - label: Presets / 預設點
+        - label: Privacy mode / 隱私模式
+        - label: Night vision / 夜視
+        - label: Two-way audio / 雙向語音
+        - label: SD card status / SD 卡狀態
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Problems or notes / 問題或備註
+      description: What doesn't work, and any error messages / 哪些功能不正常、錯誤訊息
+      render: text

@@ -1,0 +1,70 @@
+name: ✨ Feature request / 功能建議
+description: Suggest an idea or improvement / 建議新功能或改進
+title: "[Feature] "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea! Describing the problem you want to solve helps us find the best solution.
+        感謝建議！說明你想解決的問題，能幫助我們找到最好的做法。
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve? / 想解決什麼問題？
+      placeholder: "I often need to ... but currently ... / 我常常需要……但目前……"
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution / 建議的做法
+      description: How should it work? Mockups are welcome. / 希望怎麼運作？歡迎附上示意圖。
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered / 考慮過的其他做法
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area / 相關功能
+      multiple: true
+      options:
+        - Live view / 即時影像
+        - PTZ & presets / 雲台與預設點
+        - Camera controls / 攝影機控制
+        - Recording / 錄影
+        - Playback & export / 回放與匯出
+        - Motion detection / 移動偵測
+        - Notifications / 通知
+        - Two-way audio / 雙向語音
+        - Camera support / 攝影機支援
+        - Settings / 設定
+        - Security / 安全性
+        - Desktop app / 桌面版
+        - Mobile / 手機使用
+        - Language / 語言
+        - Other / 其他
+
+  - type: dropdown
+    id: importance
+    attributes:
+      label: How important is this to you? / 對你的重要程度
+      options:
+        - Nice to have / 有更好
+        - Important / 重要
+        - Blocking my use / 沒有就無法使用
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist / 確認事項
+      options:
+        - label: I searched existing issues / 我已搜尋過現有的 Issue
+          required: true
