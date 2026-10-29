@@ -67,6 +67,8 @@ struct AppState {
     restart_local: AtomicBool,
     quitting: AtomicBool,
     last_error: Mutex<Option<String>>,
+    /// 已經用通知提醒過的新版本
+    update_notified: Mutex<Option<String>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -472,6 +474,44 @@ fn open_recordings(app: &AppHandle) {
 // ---------------------------------------------------------------------------
 // 自動更新
 
+/// 背景檢查：發現新版本時只顯示 Windows 通知（同一版本只提醒一次），點擊通知才詢問是否更新，
+/// 避免在使用者全螢幕（例如玩遊戲）時跳出對話框搶走焦點
+async fn background_update_check(app: &AppHandle) {
+    let url = effective_update_url(&app.state::<AppState>().prefs.lock().unwrap());
+    let Ok(endpoint) = url::Url::parse(url.trim()) else { return };
+    let Ok(updater) = app.updater_builder().endpoints(vec![endpoint]).and_then(|b| b.build()) else { return };
+    match updater.check().await {
+        Ok(Some(update)) => {
+            let version = update.version.clone();
+            {
+                let state = app.state::<AppState>();
+                let mut seen = state.update_notified.lock().unwrap();
+                if seen.as_deref() == Some(version.as_str()) {
+                    return;
+                }
+                *seen = Some(version.clone());
+            }
+            tracing::info!("發現新版本 {version}");
+            let h = app.clone();
+            toast::show(toast::Request {
+                title: tr!("Tapo NVR {version} 已推出", "Tapo NVR {version} is available"),
+                body: tr!("點這裡更新，或從系統匣選單 →「檢查更新」", "Click to update, or use the tray menu → Check for updates"),
+                image: None,
+                on_click: Box::new(move || {
+                    let h = h.clone();
+                    tauri::async_runtime::spawn(async move {
+                        if let Err(e) = check_update(&h, true).await {
+                            h.dialog().message(e).title("Tapo NVR").kind(MessageDialogKind::Warning).show(|_| {});
+                        }
+                    });
+                }),
+            });
+        }
+        Ok(None) => {}
+        Err(e) => tracing::warn!("檢查更新失敗：{e}"),
+    }
+}
+
 async fn check_update(app: &AppHandle, interactive: bool) -> Result<String, String> {
     let url = effective_update_url(&app.state::<AppState>().prefs.lock().unwrap());
     let endpoint = url::Url::parse(url.trim()).map_err(|_| tr!("更新來源網址格式錯誤", "Invalid update URL"))?;
@@ -498,6 +538,12 @@ async fn check_update(app: &AppHandle, interactive: bool) -> Result<String, Stri
             .await
             .unwrap_or(false);
             if yes {
+                toast::show(toast::Request {
+                    title: tr!("正在下載 Tapo NVR {version}", "Downloading Tapo NVR {version}"),
+                    body: tr!("下載完成後會自動安裝並重新啟動", "It will install and restart automatically"),
+                    image: None,
+                    on_click: Box::new(|| {}),
+                });
                 stop_local(app).await;
                 update.download_and_install(|_, _| {}, || {}).await.map_err(|e| e.to_string())?;
                 app.restart();
@@ -848,13 +894,14 @@ fn main() {
                 Mode::Remote => {}
             }
 
-            // 啟動 30 秒後自動檢查更新（有設定更新來源時）
+            // 啟動 30 秒後檢查更新，之後每 6 小時檢查一次（程式通常常駐系統匣很多天）
             if !update_url.is_empty() {
                 let h = handle.clone();
                 tauri::async_runtime::spawn(async move {
                     tokio::time::sleep(Duration::from_secs(30)).await;
-                    if let Err(e) = check_update(&h, false).await {
-                        tracing::warn!("{e}");
+                    loop {
+                        background_update_check(&h).await;
+                        tokio::time::sleep(Duration::from_secs(6 * 3600)).await;
                     }
                 });
             }
