@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>錄影回放 - Tapo NVR</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/i18n.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="button" href="/">← 返回監控</a>
+    <div class="brand">⏪ 錄影回放</div>
+    <select id="camera" data-no-i18n></select>
+    <button id="prev-day" title="前一天">◀</button>
+    <input id="date" type="date" title="日期">
+    <button id="next-day" title="後一天">▶</button>
+    <div class="spacer"></div>
+    <span id="clock" class="clock">--:--:--</span>
+  </header>
+
+  <div id="empty" class="empty-state" hidden></div>
+
+  <div id="player-wrap" class="pb">
+    <div class="pb-main">
+      <div class="pb-video">
+        <video id="video" playsinline controls muted></video>
+        <div id="no-video" class="pb-novideo" hidden>這個時間沒有錄影</div>
+      </div>
+
+      <div class="pb-controls">
+        <button id="btn-prev-seg" title="上一段">⏮</button>
+        <button id="btn-back" title="倒退 10 秒">⟲ 10s</button>
+        <button id="btn-play" title="播放 / 暫停">⏯</button>
+        <button id="btn-fwd" title="快轉 30 秒">30s ⟳</button>
+        <button id="btn-next-seg" title="下一段">⏭</button>
+        <select id="speed" title="播放速度">
+          <option value="0.5">0.5×</option>
+          <option value="1" selected>1×</option>
+          <option value="2">2×</option>
+          <option value="4">4×</option>
+          <option value="8">8×</option>
+          <option value="16">16×</option>
+        </select>
+        <button id="btn-snap" title="擷取目前畫面">📷 截圖</button>
+        <span class="spacer"></span>
+        <span class="hint">匯出：</span>
+        <button id="btn-mark-in" title="以目前時間為起點">[ 起點</button>
+        <span id="range" class="hint">未選取</span>
+        <button id="btn-mark-out" title="以目前時間為終點">終點 ]</button>
+        <button id="btn-export" class="primary" disabled>⬇ 匯出</button>
+      </div>
+
+      <div class="timeline-bar">
+        <div class="zoom-switch" role="group" aria-label="時間軸縮放">
+          <button data-span="24">24 小時</button>
+          <button data-span="6">6 小時</button>
+          <button data-span="1">1 小時</button>
+          <button data-span="0.25">15 分</button>
+        </div>
+        <span class="hint">點擊時間軸跳到該時間；滾輪左右捲動</span>
+      </div>
+      <div id="timeline" class="timeline">
+        <div id="tl-track" class="tl-track"></div>
+        <div id="tl-cursor" class="tl-cursor"></div>
+        <div id="tl-range" class="tl-range" hidden></div>
+        <div id="tl-hover" class="tl-hover" hidden></div>
+      </div>
+      <div class="legend hint">
+        <span><i class="lg seg"></i>有錄影</span>
+        <span><i class="lg ev"></i>移動事件</span>
+        <span><i class="lg rg"></i>匯出範圍</span>
+      </div>
+    </div>
+
+    <aside class="pb-side">
+      <h3>當天事件 <span id="event-count" class="hint"></span></h3>
+      <ul id="events" class="event-list"></ul>
+    </aside>
+  </div>
+
+  <div id="toasts" class="toasts"></div>
+  <script type="module" src="/playback.js"></script>
+</body>
+</html>

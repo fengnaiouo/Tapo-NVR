@@ -1,0 +1,6 @@
+/target
+/bin
+/data
+/dist
+config.toml
+desktop/src-tauri/gen

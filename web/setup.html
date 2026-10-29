@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>首次設定 - Tapo NVR</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/i18n.js"></script>
+</head>
+<body class="login-page">
+  <form id="setup" class="login-card">
+    <h1>📹 歡迎使用 Tapo NVR</h1>
+    <p class="hint">建立管理員帳號。之後網頁與桌面版都用這組帳密登入。</p>
+    <label>帳號<input name="username" value="admin" autocomplete="username" required maxlength="32"></label>
+    <label>密碼（至少 8 字元）<input name="password" type="password" autocomplete="new-password" required minlength="8"></label>
+    <label>再輸入一次<input name="confirm" type="password" autocomplete="new-password" required minlength="8"></label>
+    <button type="submit">建立並開始使用</button>
+    <p id="error" class="error" hidden></p>
+  </form>
+  <script>
+    const form = document.getElementById('setup');
+    const error = document.getElementById('error');
+    fetch('/api/setup').then((r) => r.json()).then((s) => { if (!s.needs_setup) location.href = '/login.html'; });
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      error.hidden = true;
+      const {username, password, confirm} = Object.fromEntries(new FormData(form));
+      if (password !== confirm) {
+        error.textContent = t('兩次輸入的密碼不一致');
+        error.hidden = false;
+        return;
+      }
+      try {
+        const r = await fetch('/api/setup', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json', ...i18n.headers()},
+          body: JSON.stringify({username, password}),
+        });
+        if (r.ok) { location.href = '/settings.html#cameras'; return; }
+        error.textContent = (await r.json()).error || t('設定失敗');
+      } catch {
+        error.textContent = t('無法連線伺服器');
+      }
+      error.hidden = false;
+    });
+  </script>
+</body>
+</html>

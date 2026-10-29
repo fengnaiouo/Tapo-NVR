@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "只有內建的連線設定頁可以呼叫 IPC；遠端監控頁面沒有任何權限",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

@@ -1,0 +1,464 @@
+// 多語系：繁體中文（原文）/ 简体中文（伺服器由繁體自動轉換）/ English
+// - 自動偵測瀏覽器（桌面版 = Windows）語言，可在「設定 → 此裝置」手動切換
+// - 完全相同的文字會自動翻譯（含之後動態加入的節點）；含變數的字串用 t('…{x}…', {x})
+// - 標記 data-no-i18n 的元素（攝影機名稱等使用者內容）不翻譯
+(function () {
+  const EN = /*DICT*/{
+    "版面": "Layout",
+    "串流模式": "Stream mode",
+    "啟用桌面通知": "Enable desktop notifications",
+    "錄影回放": "Playback",
+    "事件紀錄": "Events",
+    "設定": "Settings",
+    "登出": "Sign out",
+    "重新讀取": "Reload",
+    "新預設點名稱": "New preset name",
+    "需要在攝影機設定填入 TP-Link 雲端密碼": "Requires the TP-Link cloud password in camera settings",
+    "點擊關閉": "Click to close",
+    "自動": "Auto",
+    "自動模式": "Auto mode",
+    "WebRTC（區網）": "WebRTC (LAN)",
+    "MSE（外網）": "MSE (remote)",
+    "全部攝影機": "All cameras",
+    "🔒 隱私模式已開啟，攝影機已停止拍攝": "🔒 Privacy mode is on, the camera is not recording",
+    "🔒 隱私模式已開啟": "🔒 Privacy mode is on",
+    "關閉隱私模式": "Turn off privacy mode",
+    "開啟隱私模式（遮蔽鏡頭）": "Turn on privacy mode (cover the lens)",
+    "攝影機設定": "Camera settings",
+    "隱私模式、夜視、偵測靈敏度、移動追蹤、SD 卡等控制，需要 TP-Link 雲端密碼。": "Privacy mode, night vision, detection sensitivity, motion tracking and SD card controls need the TP-Link cloud password.",
+    "前往設定 →": "Go to settings →",
+    "前往設定": "Go to settings",
+    "前往錄影設定": "Recording settings",
+    "🔒 隱私模式": "🔒 Privacy mode",
+    "🌙 夜視模式": "🌙 Night vision",
+    "開啟": "On",
+    "關閉": "Off",
+    "🏃 移動偵測": "🏃 Motion detection",
+    "偵測靈敏度": "Detection sensitivity",
+    "低": "Low",
+    "中": "Medium",
+    "高": "High",
+    "🧍 人形偵測": "🧍 Person detection",
+    "🎯 移動追蹤": "🎯 Motion tracking",
+    "雲台": "Pan / tilt",
+    "速度": "Speed",
+    "按住方向鍵移動，鍵盤方向鍵也可以": "Hold an arrow to move; keyboard arrow keys work too",
+    "預設點": "Presets",
+    "儲存目前位置": "Save current position",
+    "數位變焦": "Digital zoom",
+    "（數位放大，非光學變焦）": "(digital, not optical)",
+    "滑鼠滾輪縮放、拖曳平移、雙擊還原": "Scroll to zoom, drag to pan, double-click to reset",
+    "🔇 聲音": "🔇 Sound",
+    "🔊 聲音": "🔊 Sound",
+    "🎙 對講": "🎙 Talk",
+    "🎙 對講中…（點擊結束）": "🎙 Talking… (click to stop)",
+    "📷 截圖": "📷 Snapshot",
+    "⏪ 回放": "⏪ Playback",
+    "⛶ 全螢幕": "⛶ Fullscreen",
+    "尚未選擇（留空 = 不錄影）": "Not selected (empty = no recording)",
+    "停用錄影": "Disable recording",
+    "不變更請留空": "Leave empty to keep",
+    "例如：客廳": "e.g. Living room",
+    "不使用請留空": "Leave empty if unused",
+    "留空自動產生，例如 living": "Leave empty to generate, e.g. living",
+    "上一層": "Up",
+    "新資料夾名稱": "New folder name",
+    "設定 - Tapo NVR": "Settings - Tapo NVR",
+    "← 返回監控": "← Back to live view",
+    "⚙ 設定": "⚙ Settings",
+    "部分設定（監聽位址、反向代理）需要重新啟動伺服器才會生效。": "Some settings (listen address, reverse proxy) take effect after restarting the server.",
+    "立即重新啟動": "Restart now",
+    "📹 攝影機": "📹 Cameras",
+    "⏺ 錄影": "⏺ Recording",
+    "🔔 偵測與通知": "🔔 Detection & notifications",
+    "🔐 帳號安全": "🔐 Account",
+    "🌐 伺服器與外網": "🌐 Server & remote access",
+    "🖥 此裝置": "🖥 This device",
+    "攝影機": "Cameras",
+    "＋ 新增攝影機": "＋ Add camera",
+    "🔍 掃描區網攝影機": "🔍 Scan network",
+    "掃描結果": "Scan results",
+    "攝影機帳密請在 Tapo App → 攝影機 → 設定 → 進階設定 →「攝影機帳戶」建立，並到「我 → 第三方服務」開啟「第三方相容性」。": "Create the camera account in the Tapo app → camera → Settings → Advanced Settings → Camera Account, and enable Me → Third-Party Services → Third-Party Compatibility.",
+    "錄影": "Recording",
+    "錄影資料夾": "Recording folder",
+    "📁 選擇…": "📁 Choose…",
+    "建議選擇空間較大的硬碟。2K 連續錄影約每台每天 15–25 GB；「事件錄影」通常只需其中一小部分。": "Choose a large drive. Continuous 2K recording uses about 15–25 GB per camera per day; event recording usually needs a fraction of that.",
+    "保留天數": "Keep days",
+    "0 = 不限": "0 = unlimited",
+    "容量上限（GB）": "Size limit (GB)",
+    "事件前保留（秒）": "Seconds before event",
+    "事件後保留（秒）": "Seconds after event",
+    "每段長度（秒）": "Segment length (s)",
+    "每台攝影機的錄影模式（連續 / 只錄移動事件 / 關閉）請到「攝影機」→ 編輯設定。磁碟剩餘空間低於 2 GB 時會自動刪除最舊的錄影。": "Set each camera's recording mode (continuous / events only / off) in Cameras → Edit. The oldest recordings are deleted when free space drops below 2 GB.",
+    "儲存": "Save",
+    "偵測與通知": "Detection & notifications",
+    "啟用通知（關閉後仍會記錄事件與錄影）": "Enable notifications (events and recordings continue when off)",
+    "同一台攝影機的最短通知間隔（秒）": "Minimum interval between notifications per camera (s)",
+    "避免同一段移動連續通知；0 = 每次都通知": "Avoids repeated notifications for the same movement; 0 = every time",
+    "偵測到移動時自動截圖": "Take a snapshot when motion is detected",
+    "最多保留事件數": "Maximum events kept",
+    "超過時自動刪除最舊的事件與截圖": "The oldest events and snapshots are deleted beyond this",
+    "要開關個別攝影機的移動偵測或通知，請到「攝影機」→ 編輯。": "Turn motion detection or notifications on/off per camera in Cameras → Edit.",
+    "通知語言": "Notification language",
+    "手機推播與背景訊息使用的語言": "Language used for push notifications and background messages",
+    "跟隨系統": "Follow system",
+    "📱 手機推播（ntfy，免費）": "📱 Phone push (ntfy, free)",
+    "手機安裝": "Install the",
+    "App（iOS / Android）": "app (iOS / Android)",
+    "在下方取一個不易被猜到的主題名稱，例如": "Pick a hard-to-guess topic name below, e.g.",
+    "在 App 中訂閱同一個主題，按「傳送測試」確認": "Subscribe to the same topic in the app and press Send test",
+    "主題（留空 = 不推播）": "Topic (empty = no push)",
+    "ntfy 伺服器": "ntfy server",
+    "使用自架 ntfy 時才需要修改": "Only change this for a self-hosted ntfy",
+    "存取權杖（選填）": "Access token (optional)",
+    "對外網址（選填）": "Public URL (optional)",
+    "填入 Cloudflare Tunnel 網址後，點手機推播會直接開啟該攝影機": "With a Cloudflare Tunnel URL, tapping a push notification opens that camera",
+    "📨 傳送測試": "📨 Send test",
+    "帳號安全": "Account",
+    "登入帳號": "Username",
+    "新密碼（不修改請留空）": "New password (leave empty to keep)",
+    "再輸入一次新密碼": "Repeat new password",
+    "目前密碼（必填）": "Current password (required)",
+    "變更密碼後，其他已登入的瀏覽器與桌面版都會被登出。": "Changing the password signs out all other browsers and desktop apps.",
+    "伺服器與外網": "Server & remote access",
+    "監聽位址": "Listen address",
+    "需重啟": "restart",
+    "0.0.0.0:8080 = 區網可連；127.0.0.1:8080 = 只允許本機（搭配 Cloudflare Tunnel）": "0.0.0.0:8080 = reachable on the LAN; 127.0.0.1:8080 = this computer only (with Cloudflare Tunnel)",
+    "透過 Cloudflare Tunnel 對外": "Exposed through Cloudflare Tunnel",
+    "開啟後信任 Cloudflare 傳來的真實 IP 與 HTTPS 標頭（登入次數限制、安全 Cookie）。": "Trusts the real IP and HTTPS headers from Cloudflare (login rate limit, secure cookies).",
+    "登入有效天數": "Session days",
+    "WebRTC 連接埠（區網低延遲串流）": "WebRTC port (low-latency LAN streaming)",
+    "需在 Windows 防火牆開放此 TCP/UDP 連接埠（僅私人網路）": "Allow this TCP/UDP port in Windows Firewall (private networks only)",
+    "額外 WebRTC 位址（每行一個，選填）": "Extra WebRTC candidates (one per line, optional)",
+    "Cloudflare Tunnel 設定步驟": "Cloudflare Tunnel setup",
+    "安裝：": "Install:",
+    "設定轉送到": "Forward to",
+    "，並勾選上方「透過 Cloudflare Tunnel 對外」": "and tick “Exposed through Cloudflare Tunnel” above",
+    "詳見專案內": "See",
+    "系統": "System",
+    "設定資料庫（密碼已加密）：": "Settings database (secrets encrypted):",
+    "重新啟動伺服器": "Restart server",
+    "此裝置": "This device",
+    "以下設定只存在這個瀏覽器 / 這台電腦。": "These settings are stored only in this browser / computer.",
+    "語言": "Language",
+    "自動（區網 WebRTC、外網 MSE）": "Auto (WebRTC on LAN, MSE remotely)",
+    "WebRTC 優先（低延遲）": "WebRTC first (low latency)",
+    "MSE（穩定、適合外網）": "MSE (stable, good for remote)",
+    "監控畫面版面": "Live view layout",
+    "1 欄": "1 column",
+    "2 欄（4 格）": "2 columns (4)",
+    "3 欄（9 格）": "3 columns (9)",
+    "🔔 啟用瀏覽器通知": "🔔 Enable browser notifications",
+    "桌面版設定": "Desktop app settings",
+    "開機自動啟動、桌面通知開關、變更伺服器：請在系統匣圖示按右鍵設定。": "Start with Windows, desktop notifications and server selection are in the tray icon's right-click menu.",
+    "新增攝影機": "Add camera",
+    "名稱": "Name",
+    "IP 位址": "IP address",
+    "影像來源": "Video source",
+    "RTSP（標準，需攝影機帳戶）": "RTSP (standard, needs a camera account)",
+    "Tapo 私有串流（沒有 RTSP 的機型，需雲端密碼）": "Tapo stream (for models without RTSP, needs the cloud password)",
+    "攝影機帳戶 - 帳號": "Camera account - username",
+    "攝影機帳戶 - 密碼": "Camera account - password",
+    "錄影模式": "Recording mode",
+    "只錄移動事件（省空間）": "Events only (saves space)",
+    "連續錄影（24 小時）": "Continuous (24 h)",
+    "不錄影": "No recording",
+    "雲台控制": "Pan / tilt",
+    "移動偵測": "Motion detection",
+    "推送通知": "Notifications",
+    "攝影機控制與雙向語音（選填）": "Camera controls & two-way audio (optional)",
+    "TP-Link 雲端帳號密碼": "TP-Link cloud account password",
+    "隱私模式、夜視、偵測靈敏度、移動追蹤、SD 卡狀態與對講，都需透過 Tapo 私有協定，使用你登入 Tapo App 的 TP-Link 帳號密碼（攝影機擁有者的帳號）。": "Privacy mode, night vision, detection sensitivity, motion tracking, SD card status and talk use the Tapo private protocol with the TP-Link account password you use in the Tapo app (the camera owner's account).",
+    "⚠️ 攝影機約允許 10 次登入失敗，超過會暫時鎖定；密碼錯誤時本程式會停止重試，修正密碼後才會再登入。": "⚠️ The camera allows about 10 failed logins before locking temporarily. Tapo NVR stops retrying after a wrong password until you fix it.",
+    "移除已儲存的雲端密碼": "Remove the saved cloud password",
+    "進階": "Advanced",
+    "代號（英文小寫，建立後不可修改）": "ID (lowercase, cannot be changed later)",
+    "RTSP 連接埠": "RTSP port",
+    "ONVIF 連接埠": "ONVIF port",
+    "🔌 測試連線": "🔌 Test connection",
+    "取消": "Cancel",
+    "選擇錄影資料夾": "Choose recording folder",
+    "本機磁碟": "Drives",
+    "＋ 建立": "＋ Create",
+    "選擇此資料夾": "Use this folder",
+    "前一天": "Previous day",
+    "日期": "Date",
+    "後一天": "Next day",
+    "上一段": "Previous segment",
+    "倒退 10 秒": "Back 10 s",
+    "播放 / 暫停": "Play / pause",
+    "快轉 30 秒": "Forward 30 s",
+    "下一段": "Next segment",
+    "播放速度": "Playback speed",
+    "擷取目前畫面": "Capture current frame",
+    "以目前時間為起點": "Set start at current time",
+    "以目前時間為終點": "Set end at current time",
+    "時間軸縮放": "Timeline zoom",
+    "錄影回放 - Tapo NVR": "Playback - Tapo NVR",
+    "⏪ 錄影回放": "⏪ Playback",
+    "這個時間沒有錄影": "No recording at this time",
+    "匯出：": "Export:",
+    "[ 起點": "[ Start",
+    "未選取": "Not set",
+    "終點 ]": "End ]",
+    "⬇ 匯出": "⬇ Export",
+    "24 小時": "24 h",
+    "6 小時": "6 h",
+    "1 小時": "1 h",
+    "15 分": "15 min",
+    "點擊時間軸跳到該時間；滾輪左右捲動": "Click the timeline to jump; scroll to pan",
+    "有錄影": "Recorded",
+    "移動事件": "Motion event",
+    "匯出範圍": "Export range",
+    "當天事件": "Events this day",
+    "登入 - Tapo NVR": "Sign in - Tapo NVR",
+    "帳號": "Username",
+    "密碼": "Password",
+    "登入": "Sign in",
+    "登入失敗": "Sign-in failed",
+    "無法連線伺服器": "Cannot reach the server",
+    "首次設定 - Tapo NVR": "Setup - Tapo NVR",
+    "📹 歡迎使用 Tapo NVR": "📹 Welcome to Tapo NVR",
+    "建立管理員帳號。之後網頁與桌面版都用這組帳密登入。": "Create the administrator account. You will use it to sign in on the web and in the desktop app.",
+    "密碼（至少 8 字元）": "Password (at least 8 characters)",
+    "再輸入一次": "Repeat password",
+    "建立並開始使用": "Create and start",
+    "兩次輸入的密碼不一致": "The passwords do not match",
+    "設定失敗": "Setup failed",
+    "移動偵測中": "Motion",
+    "偵測到人形": "Person detected",
+    "鏡頭遭遮蔽": "Camera tampering",
+    "錄影中": "Recording",
+    "向左（按住）": "Left (hold)",
+    "向上（按住）": "Up (hold)",
+    "向下（按住）": "Down (hold)",
+    "向右（按住）": "Right (hold)",
+    "隱私模式": "Privacy mode",
+    "夜視模式": "Night vision",
+    "🌙 自動": "🌙 Auto",
+    "🌙 開": "🌙 On",
+    "🌙 關": "🌙 Off",
+    "截圖": "Snapshot",
+    "回放": "Playback",
+    "放大 / 更多控制": "Expand / more controls",
+    "無法控制：{e}": "Cannot control: {e}",
+    "無法讀取攝影機設定：{e}": "Cannot read camera settings: {e}",
+    "💾 SD 卡：{status}，影片空間 {free} 可用 / 共 {total}": "💾 SD card: {status}, {free} free of {total} for video",
+    "正常": "OK",
+    "💾 未插入 SD 卡": "💾 No SD card",
+    "{model} · 韌體 {fw}": "{model} · firmware {fw}",
+    "事件連線正常": "Event connection OK",
+    "錄影異常：{e}": "Recording error: {e}",
+    "對講需要 HTTPS、localhost 或桌面版（瀏覽器限制麥克風權限）": "Talk needs HTTPS, localhost or the desktop app (browser microphone restrictions)",
+    "對講連線失敗（需 WebRTC，外網經 Cloudflare Tunnel 時無法使用）": "Talk failed (needs WebRTC; not available through Cloudflare Tunnel)",
+    "雲台控制失敗：{e}": "Pan/tilt failed: {e}",
+    "載入中…": "Loading…",
+    "尚無預設點": "No presets yet",
+    "刪除": "Delete",
+    "刪除預設點「{name}」？": "Delete preset “{name}”?",
+    "無法讀取：{e}": "Cannot read: {e}",
+    "點擊放大": "Click to enlarge",
+    "▶ 回放": "▶ Play",
+    "目前沒有事件": "No events",
+    "瀏覽器通知需要 HTTPS 或 localhost；目前只顯示頁內提示": "Browser notifications need HTTPS or localhost; showing in-page alerts only",
+    "桌面通知已啟用": "Desktop notifications enabled",
+    "瀏覽器通知需要 HTTPS（例如 Cloudflare Tunnel）或 localhost": "Browser notifications need HTTPS (e.g. Cloudflare Tunnel) or localhost",
+    "已儲存預設點「{name}」": "Saved preset “{name}”",
+    "儲存失敗：{e}": "Save failed: {e}",
+    "{name}：{label}": "{name}: {label}",
+    "尚未新增攝影機。": "No cameras yet.",
+    "尚未新增攝影機。前往設定 →": "No cameras yet. Go to settings →",
+    "已設定（不變更請留空）": "Set (leave empty to keep)",
+    "選填": "Optional",
+    "請用 scripts\\start.bat 啟動伺服器，才能從網頁重新啟動": "Start the server with scripts\\start.bat to restart it from the web",
+    "尚未新增攝影機。可以按「掃描區網攝影機」自動尋找。": "No cameras yet. Press “Scan network” to find them.",
+    "上移": "Move up",
+    "下移": "Move down",
+    "編輯": "Edit",
+    "事件錄影": "Event recording",
+    "連續錄影": "Continuous",
+    "偵測＋通知": "Detection + notifications",
+    "偵測（不通知）": "Detection (no notifications)",
+    "偵測關閉": "Detection off",
+    "攝影機控制＋對講": "Camera controls + talk",
+    "Tapo 私有串流": "Tapo stream",
+    "⚠️ 未設定密碼": "⚠️ No password",
+    "確定刪除「{name}」？\n（過去的事件紀錄會保留）": "Delete “{name}”?\n(Past events are kept)",
+    "已刪除 {name}": "Deleted {name}",
+    "編輯：{name}": "Edit: {name}",
+    "留空 = 不變更": "Empty = keep",
+    "測試中…": "Testing…",
+    "連線中，約需 5–10 秒…": "Connecting, about 5–10 seconds…",
+    "已儲存「{name}」，設定立即生效": "Saved “{name}”, applied immediately",
+    "掃描中（約 3 秒）…": "Scanning (about 3 seconds)…",
+    "找不到攝影機。請確認攝影機與伺服器在同一個網段；也可以手動新增。": "No cameras found. Make sure they are on the same network as the server, or add one manually.",
+    "已加入：{name}": "Added as: {name}",
+    "加入": "Add",
+    "已使用 {used} · 磁碟剩餘 {free}": "{used} used · {free} free on disk",
+    "⏸ 尚未選擇錄影資料夾，目前不會錄影。": "⏸ No recording folder selected; nothing is recorded.",
+    "⏸ 未錄影": "⏸ Not recording",
+    "🔴 錄影中": "🔴 Recording",
+    "錄影異常": "Recording error",
+    "⏳ 啟動中": "⏳ Starting",
+    "{name}（{mode}）：{state}": "{name} ({mode}): {state}",
+    "錄影設定已儲存並套用": "Recording settings saved and applied",
+    "停用錄影？（已錄的影片不會被刪除）": "Disable recording? (Existing videos are kept)",
+    "此磁碟剩餘 {free}": "{free} free on this drive",
+    "請選擇磁碟": "Choose a drive",
+    "（沒有子資料夾）": "(no subfolders)",
+    "（剩餘 {free}）": "({free} free)",
+    "已選擇資料夾，按「儲存」後開始錄影": "Folder selected; press Save to start recording",
+    "已送出測試通知，請查看手機": "Test notification sent, check your phone",
+    "已儲存": "Saved",
+    "兩次輸入的新密碼不一致": "The new passwords do not match",
+    "密碼已變更，其他裝置已登出": "Password changed; other devices were signed out",
+    "已儲存，請重新啟動伺服器以套用": "Saved; restart the server to apply",
+    "已儲存並套用": "Saved and applied",
+    "重新啟動伺服器？畫面會中斷數秒。": "Restart the server? The view will pause for a few seconds.",
+    "重新啟動中…": "Restarting…",
+    "伺服器沒有回應，請確認 start.bat 視窗": "The server is not responding; check the start.bat window",
+    "已儲存（此裝置）": "Saved (this device)",
+    "目前連線不支援瀏覽器通知（需 HTTPS 或 localhost），只會顯示頁內提示": "Browser notifications need HTTPS or localhost; showing in-page alerts only",
+    "已啟用": "Enabled",
+    "已被封鎖，請在瀏覽器網址列的網站設定中允許": "Blocked; allow it in the browser's site settings",
+    "尚未啟用": "Not enabled",
+    "這一天沒有錄影": "No recordings on this day",
+    "尚無錄影。請確認「設定 → 錄影」已選擇資料夾，且攝影機的錄影模式不是「關閉」。": "No recordings yet. Check that a folder is selected in Settings → Recording and the camera's recording mode is not Off.",
+    "錄影進行中，第一段影片完成後即可回放（約 1 分鐘）": "Recording in progress; playback is available once the first segment completes (about 1 minute)",
+    "這段仍在錄製中，稍後即可回放": "Still recording; available for playback shortly",
+    "這個時間之後沒有錄影": "No recordings after this time",
+    "已播到最新，等待下一段影片完成…": "Caught up; waiting for the next segment…",
+    "{a} – {b}（{n} 秒）": "{a} – {b} ({n} s)",
+    "這一天沒有事件": "No events on this day",
+    "沒有更早的錄影": "No earlier recordings",
+    "沒有更晚的錄影": "No later recordings",
+    "目前沒有畫面": "No picture",
+    "匯出中，完成後會自動下載…": "Exporting; the download starts when ready…",
+    "連線中": "Connecting",
+    "錯誤": "Error",
+    "重新連線": "Reconnecting",
+    "未登入": "Not signed in",
+    "ONVIF 裝置": "ONVIF device",
+    "Tapo 裝置": "Tapo device",
+    "Tapo Hub（電池攝影機需透過 Hub，目前不支援串流）": "Tapo Hub (battery cameras behind a hub are not supported for streaming yet)",
+    "已開放 RTSP": "RTSP open",
+    "未開放 RTSP：可改用 Tapo 私有串流，或在 Tapo App 開啟「第三方相容性」並建立攝影機帳戶": "RTSP closed: use the Tapo stream, or enable Third-Party Compatibility and create a camera account in the Tapo app",
+    "ONVIF 可用": "ONVIF available",
+    "ONVIF 未開啟（移動偵測通知需要）": "ONVIF closed (needed for motion notifications)",
+    "韌體 {fw}": "firmware {fw}",
+    "室內雲台": "Indoor pan/tilt",
+    "室內固定": "Indoor fixed",
+    "戶外固定": "Outdoor fixed",
+    "戶外雲台": "Outdoor pan/tilt",
+    "電池攝影機": "Battery camera",
+    "門鈴": "Doorbell",
+    "嬰兒監視器": "Baby monitor",
+    "雙鏡頭": "Dual lens",
+    "未知機型": "Unknown model"
+  }/*END*/;
+
+  const LOCALES = {'zh-TW': 'zh-TW', 'zh-CN': 'zh-CN', en: 'en-US'};
+
+  function detect() {
+    for (const l of navigator.languages || [navigator.language]) {
+      if (/^zh/i.test(l)) return /-(cn|sg|my|hans)/i.test(l) ? 'zh-CN' : 'zh-TW';
+      if (/^en/i.test(l)) return 'en';
+    }
+    return 'en';
+  }
+
+  const pref = localStorage.getItem('lang') || 'auto';
+  const lang = pref === 'auto' || !LOCALES[pref] ? detect() : pref;
+  let dict = lang === 'en' ? EN : null;
+  const ready = lang === 'zh-CN'
+    ? fetch('/api/i18n/zh-CN').then((r) => r.json()).then((d) => { dict = d; }).catch(() => {})
+    : Promise.resolve();
+
+  function tr(key) {
+    if (!dict || key == null) return key;
+    const v = dict[key];
+    return v == null ? key : v;
+  }
+
+  function t(key, params) {
+    let s = tr(key);
+    if (params) s = s.replace(/\{(\w+)\}/g, (m, k) => (params[k] ?? m));
+    return s;
+  }
+
+  const ATTRS = ['title', 'placeholder', 'aria-label'];
+  const skip = (el) => el && el.closest && el.closest('[data-no-i18n]');
+
+  function translateText(node) {
+    const raw = node.nodeValue;
+    const key = raw.trim();
+    if (!key || !/[\u4e00-\u9fff]/.test(key)) return;
+    const v = tr(key);
+    if (v !== key) node.nodeValue = raw.replace(key, v);
+  }
+
+  function translateEl(el) {
+    for (const a of ATTRS) {
+      const v = el.getAttribute(a);
+      if (v && /[\u4e00-\u9fff]/.test(v)) {
+        const n = tr(v.trim());
+        if (n !== v.trim()) el.setAttribute(a, n);
+      }
+    }
+  }
+
+  function translate(root) {
+    if (!dict || !root) return;
+    if (root.nodeType === 3) {
+      if (!skip(root.parentElement)) translateText(root);
+      return;
+    }
+    if (root.nodeType !== 1 || skip(root)) return;
+    translateEl(root);
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
+      acceptNode: (n) => (n.nodeType === 1 && n.hasAttribute('data-no-i18n') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+    });
+    let n;
+    while ((n = walker.nextNode())) {
+      if (n.nodeType === 3) translateText(n);
+      else translateEl(n);
+    }
+  }
+
+  function start() {
+    if (dict) {
+      document.title = tr(document.title);
+      translate(document.body);
+      new MutationObserver((records) => {
+        for (const r of records) {
+          if (r.type === 'childList') r.addedNodes.forEach(translate);
+          else if (r.type === 'characterData') { if (!skip(r.target.parentElement)) translateText(r.target); }
+          else if (r.type === 'attributes' && !skip(r.target)) translateEl(r.target);
+        }
+      }).observe(document.body, {childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ATTRS});
+    }
+    document.documentElement.classList.remove('i18n-loading');
+  }
+
+  document.documentElement.lang = lang;
+  if (lang !== 'zh-TW') document.documentElement.classList.add('i18n-loading');
+  const domReady = new Promise((r) => (document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', r) : r()));
+  Promise.all([ready, domReady]).then(start);
+
+  window.i18n = {
+    lang,
+    pref,
+    locale: LOCALES[lang],
+    t,
+    ready,
+    setLang(l) {
+      localStorage.setItem('lang', l);
+      location.reload();
+    },
+    /** 附在 API 請求上，讓伺服器回傳相同語言的錯誤訊息 */
+    headers() {
+      return {'X-Lang': lang};
+    },
+  };
+  window.t = t;
+})();

@@ -1,0 +1,61 @@
+[package]
+name = "tapo-nvr"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "tapo_nvr"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tapo-nvr"
+path = "src/main.rs"
+
+[dependencies]
+aes = "0.8"
+anyhow = "1"
+cbc = { version = "0.1", features = ["alloc", "block-padding"] }
+ccm = "0.5"
+crc32fast = "1"
+hkdf = "0.12"
+hmac = "0.12"
+num-bigint = "0.4"
+p256 = { version = "0.13", features = ["arithmetic"] }
+pbkdf2 = { version = "0.12", default-features = false, features = ["hmac"] }
+md5 = "0.7"
+sha2 = "0.10"
+sys-locale = "0.3"
+zhconv = "0.4"
+argon2 = "0.5"
+axum = { version = "0.8", features = ["ws"] }
+base64 = "0.22"
+chrono = { version = "0.4", features = ["serde"] }
+futures-util = "0.3"
+getrandom = "0.2"
+if-addrs = "0.13"
+mime_guess = "2"
+reqwest = { version = "0.12", default-features = false, features = ["native-tls", "json"] }
+roxmltree = "0.20"
+rusqlite = { version = "0.41", features = ["bundled"] }
+rust-embed = "8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha1 = "0.10"
+tokio = { version = "1", features = ["full"] }
+tokio-tungstenite = "0.26"
+tokio-util = { version = "0.7", features = ["io"] }
+toml = "0.8"
+tower = { version = "0.5", features = ["util"] }
+tower-http = { version = "0.6", features = ["fs", "set-header"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Cryptography",
+    "Win32_Storage_FileSystem",
+    "Win32_System_JobObjects",
+    "Win32_System_Threading",
+] }

@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <title>Tapo NVR</title>
+  <style>
+    :root { color-scheme: dark; --bg: #0f1115; --panel: #181b22; --panel-2: #20242d; --border: #2c313c; --muted: #8a92a3; --accent: #3b82f6; }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body {
+      margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      background: var(--bg); color: #e6e8ec;
+      font: 14px/1.5 system-ui, "Segoe UI", "Microsoft JhengHei", "Microsoft YaHei", sans-serif;
+    }
+    .card { width: min(560px, 94vw); display: flex; flex-direction: column; gap: 14px; padding: 28px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; }
+    h1 { margin: 0; font-size: 22px; }
+    h2 { margin: 8px 0 0; font-size: 15px; }
+    label { display: flex; flex-direction: column; gap: 4px; color: var(--muted); }
+    input, button { font: inherit; color: inherit; background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; }
+    button { cursor: pointer; }
+    button:hover { border-color: var(--accent); }
+    button.primary { background: var(--accent); border-color: var(--accent); }
+    button:disabled { opacity: .6; cursor: wait; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .row input { flex: 1; min-width: 0; }
+    .hint { color: var(--muted); font-size: 12px; margin: 0; word-break: break-all; }
+    .error { color: #fca5a5; margin: 0; white-space: pre-wrap; word-break: break-word; }
+    .ok { color: #86efac; margin: 0; }
+    .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .mode { padding: 12px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; }
+    .mode.active { border-color: var(--accent); background: #1e293b; }
+    .mode b { display: block; color: #e6e8ec; }
+    .spinner { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+    hr { border: 0; border-top: 1px solid var(--border); width: 100%; margin: 4px 0; }
+  </style>
+</head>
+<body>
+  <!-- 啟動中 -->
+  <div id="view-loading" class="card" style="text-align:center">
+    <h1>📹 Tapo NVR</h1>
+    <div class="spinner"></div>
+    <p class="hint" id="loading-text" data-t="starting"></p>
+  </div>
+
+  <!-- 啟動失敗 -->
+  <div id="view-error" class="card" hidden>
+    <h1 data-t="failTitle"></h1>
+    <p id="error-text" class="error"></p>
+    <div id="port-fix" hidden>
+      <p class="hint" data-t="portHint"></p>
+      <div class="row">
+        <input id="listen" value="0.0.0.0:8090">
+        <button id="btn-listen" data-t="usePort"></button>
+      </div>
+    </div>
+    <div class="row">
+      <button class="primary" id="btn-retry" data-t="retry"></button>
+      <button id="btn-to-prefs" data-t="prefs"></button>
+      <button id="btn-open-data" data-t="openFolder"></button>
+    </div>
+  </div>
+
+  <!-- 偏好設定 -->
+  <div id="view-prefs" class="card" hidden>
+    <h1 data-t="prefsTitle"></h1>
+
+    <h2 data-t="mode"></h2>
+    <div class="modes">
+      <div class="mode" data-mode="local">
+        <b data-t="localTitle"></b>
+        <span class="hint" data-t="localDesc"></span>
+      </div>
+      <div class="mode" data-mode="remote">
+        <b data-t="remoteTitle"></b>
+        <span class="hint" data-t="remoteDesc"></span>
+      </div>
+    </div>
+
+    <div id="local-panel" hidden>
+      <div class="row">
+        <button class="primary" id="btn-use-local" data-t="useLocal"></button>
+        <button id="btn-import" data-t="import"></button>
+      </div>
+      <p class="hint" data-t="importHint"></p>
+      <p class="hint"><span data-t="dbPath"></span><code id="config-path"></code></p>
+    </div>
+
+    <form id="remote-panel" hidden>
+      <label><span data-t="serverUrl"></span><input name="server_url" placeholder="http://192.168.1.10:8080 / https://cam.example.com" required></label>
+      <label><span data-t="username"></span><input name="username" autocomplete="username" required></label>
+      <label><span data-t="password"></span><input name="password" type="password" autocomplete="current-password" required></label>
+      <button class="primary" type="submit" data-t="connect"></button>
+    </form>
+
+    <hr>
+    <h2 data-t="language"></h2>
+    <div class="row">
+      <select id="lang" style="font:inherit;color:inherit;background:var(--panel-2);border:1px solid var(--border);border-radius:6px;padding:8px 10px">
+        <option value="auto" data-t="langAuto"></option>
+        <option value="zh-TW">繁體中文</option>
+        <option value="zh-CN">简体中文</option>
+        <option value="en">English</option>
+      </select>
+    </div>
+
+    <hr>
+    <h2 data-t="update"></h2>
+    <label><span data-t="updateUrl"></span>
+      <div class="row">
+        <input id="update-url">
+        <button id="btn-save-update" data-t="save"></button>
+        <button id="btn-check-update" data-t="checkUpdate"></button>
+      </div>
+    </label>
+    <p class="hint"><span data-t="updateDefault"></span><code id="default-update-url"></code></p>
+
+    <p id="msg" hidden></p>
+    <hr>
+    <div class="row">
+      <button id="btn-back" data-t="back"></button>
+      <span class="hint" style="margin-left:auto"><span data-t="version"></span> <span id="version"></span></span>
+    </div>
+  </div>
+
+  <script>
+    const DICT = {
+      'zh-TW': {
+        starting: '正在啟動伺服器…', connecting: '正在連線伺服器…', failTitle: '⚠️ 無法啟動',
+        portHint: '連接埠可能被其他程式占用（例如另外執行的 Tapo NVR 伺服器）。請關閉那個程式，或改用其他連接埠：',
+        usePort: '改用此連接埠', retry: '重試', prefs: '偏好設定', openFolder: '開啟資料夾',
+        prefsTitle: '⚙ 應用程式偏好設定', mode: '運作模式',
+        localTitle: '🖥 本機伺服器（建議）', localDesc: '這台電腦直接連線攝影機、錄影並推送通知。其他裝置可用瀏覽器連到這台電腦。',
+        remoteTitle: '🌐 連線到其他電腦', remoteDesc: '伺服器在另一台電腦上執行，這裡只當觀看端。',
+        useLocal: '使用本機伺服器', import: '📥 匯入舊版 config.toml',
+        importHint: '從 0.2 版或命令列版本升級時，可以匯入舊設定檔（攝影機、帳號、錄影設定都會沿用）。',
+        dbPath: '設定資料庫（密碼以 Windows DPAPI 加密）：',
+        serverUrl: '伺服器網址', username: '帳號', password: '密碼', connect: '連線',
+        language: '語言', langAuto: '跟隨系統',
+        update: '自動更新', updateUrl: '更新來源網址（留空使用預設值）', save: '儲存', checkUpdate: '檢查更新',
+        updateDefault: '預設：', back: '← 返回', version: '版本', saved: '已儲存', restarting: '，伺服器重新啟動中…',
+      },
+      'zh-CN': {
+        starting: '正在启动服务器…', connecting: '正在连接服务器…', failTitle: '⚠️ 无法启动',
+        portHint: '端口可能被其他程序占用（例如另外运行的 Tapo NVR 服务器）。请关闭该程序，或改用其他端口：',
+        usePort: '改用此端口', retry: '重试', prefs: '偏好设置', openFolder: '打开文件夹',
+        prefsTitle: '⚙ 应用程序偏好设置', mode: '运行模式',
+        localTitle: '🖥 本机服务器（推荐）', localDesc: '这台电脑直接连接摄像头、录像并推送通知。其他设备可用浏览器连接到这台电脑。',
+        remoteTitle: '🌐 连接到其他电脑', remoteDesc: '服务器在另一台电脑上运行，这里只作为观看端。',
+        useLocal: '使用本机服务器', import: '📥 导入旧版 config.toml',
+        importHint: '从 0.2 版或命令行版本升级时，可以导入旧配置文件（摄像头、账号、录像设置都会沿用）。',
+        dbPath: '设置数据库（密码以 Windows DPAPI 加密）：',
+        serverUrl: '服务器网址', username: '账号', password: '密码', connect: '连接',
+        language: '语言', langAuto: '跟随系统',
+        update: '自动更新', updateUrl: '更新源网址（留空使用默认值）', save: '保存', checkUpdate: '检查更新',
+        updateDefault: '默认：', back: '← 返回', version: '版本', saved: '已保存', restarting: '，服务器正在重新启动…',
+      },
+      en: {
+        starting: 'Starting server…', connecting: 'Connecting to server…', failTitle: '⚠️ Failed to start',
+        portHint: 'The port may be in use by another program (for example another Tapo NVR server). Close it, or use another port:',
+        usePort: 'Use this port', retry: 'Retry', prefs: 'Preferences', openFolder: 'Open folder',
+        prefsTitle: '⚙ App preferences', mode: 'Mode',
+        localTitle: '🖥 Local server (recommended)', localDesc: 'This PC connects to the cameras, records and sends notifications. Other devices can open it in a browser.',
+        remoteTitle: '🌐 Connect to another PC', remoteDesc: 'The server runs on another computer; this app is a viewer only.',
+        useLocal: 'Use local server', import: '📥 Import legacy config.toml',
+        importHint: 'When upgrading from 0.2 or the command-line version, import the old config file (cameras, account and recording settings).',
+        dbPath: 'Settings database (secrets encrypted with Windows DPAPI): ',
+        serverUrl: 'Server URL', username: 'Username', password: 'Password', connect: 'Connect',
+        language: 'Language', langAuto: 'System default',
+        update: 'Auto update', updateUrl: 'Update URL (leave empty for default)', save: 'Save', checkUpdate: 'Check for updates',
+        updateDefault: 'Default: ', back: '← Back', version: 'Version', saved: 'Saved', restarting: ', restarting server…',
+      },
+    };
+    function detectLang() {
+      const saved = localStorage.getItem('lang');
+      if (saved && DICT[saved]) return saved;
+      const n = (navigator.language || 'en').toLowerCase();
+      if (n.startsWith('zh')) return /cn|sg|hans/.test(n) ? 'zh-CN' : 'zh-TW';
+      return 'en';
+    }
+    let lang = detectLang();
+    const t = (k) => (DICT[lang] || DICT.en)[k] ?? k;
+    function applyLang() {
+      document.documentElement.lang = lang === 'zh-TW' ? 'zh-Hant' : lang === 'zh-CN' ? 'zh-Hans' : 'en';
+      document.querySelectorAll('[data-t]').forEach((el) => el.textContent = t(el.dataset.t));
+    }
+    applyLang();
+
+    const {invoke} = window.__TAURI__.core;
+    const $ = (s) => document.querySelector(s);
+    const view = new URLSearchParams(location.search).get('view');
+    let prefs = null;
+
+    function show(name) {
+      for (const v of ['loading', 'error', 'prefs']) $(`#view-${v}`).hidden = v !== name;
+    }
+    function msg(text, ok = true) {
+      const m = $('#msg');
+      m.hidden = false;
+      m.className = ok ? 'ok' : 'error';
+      m.textContent = text;
+    }
+    function selectMode(mode) {
+      document.querySelectorAll('.mode').forEach((el) => el.classList.toggle('active', el.dataset.mode === mode));
+      $('#local-panel').hidden = mode !== 'local';
+      $('#remote-panel').hidden = mode !== 'remote';
+    }
+    async function busy(btn, fn) {
+      btn.disabled = true;
+      try { await fn(); } catch (e) { msg(String(e), false); } finally { btn.disabled = false; }
+    }
+
+    async function init() {
+      prefs = await invoke('get_prefs');
+      $('#version').textContent = prefs.version;
+      $('#config-path').textContent = prefs.config_path;
+      $('#update-url').value = prefs.update_url;
+      $('#update-url').placeholder = prefs.default_update_url;
+      $('#default-update-url').textContent = prefs.default_update_url;
+      $('#remote-panel').server_url.value = prefs.server_url;
+      $('#lang').value = localStorage.getItem('lang') || 'auto';
+      selectMode(prefs.mode);
+
+      if (view === 'prefs') return show('prefs');
+      if (view === 'error' && prefs.error) {
+        $('#error-text').textContent = prefs.error;
+        $('#port-fix').hidden = !/監聽|连接埠|連接埠|address|bind|10048/i.test(prefs.error);
+        return show('error');
+      }
+      // 遠端模式且尚未登入：直接顯示連線表單
+      if (prefs.mode === 'remote' && !prefs.has_token) return show('prefs');
+      $('#loading-text').textContent = t(prefs.mode === 'local' ? 'starting' : 'connecting');
+      show('loading');
+    }
+
+    $('#lang').onchange = (e) => {
+      if (e.target.value === 'auto') localStorage.removeItem('lang');
+      else localStorage.setItem('lang', e.target.value);
+      lang = detectLang();
+      applyLang();
+    };
+    document.querySelectorAll('.mode').forEach((el) => el.onclick = () => selectMode(el.dataset.mode));
+    $('#btn-use-local').onclick = (e) => busy(e.target, async () => {
+      await invoke('use_local');
+      show('loading');
+    });
+    $('#btn-import').onclick = (e) => busy(e.target, async () => {
+      const r = await invoke('import_config');
+      msg(r + t('restarting'));
+    });
+    $('#remote-panel').onsubmit = (e) => {
+      e.preventDefault();
+      const f = e.target;
+      busy(f.querySelector('button'), async () => {
+        await invoke('connect_remote', {serverUrl: f.server_url.value, username: f.username.value, password: f.password.value});
+        show('loading');
+      });
+    };
+    $('#btn-save-update').onclick = (e) => busy(e.target, async () => {
+      await invoke('set_update_url', {url: $('#update-url').value});
+      msg(t('saved'));
+    });
+    $('#btn-check-update').onclick = (e) => busy(e.target, async () => {
+      await invoke('set_update_url', {url: $('#update-url').value});
+      msg(await invoke('check_update_cmd'));
+    });
+    $('#btn-back').onclick = (e) => busy(e.target, () => invoke('back_to_app'));
+    $('#btn-retry').onclick = (e) => busy(e.target, async () => {
+      show('loading');
+      await invoke('retry');
+    });
+    $('#btn-to-prefs').onclick = () => show('prefs');
+    $('#btn-open-data').onclick = () => invoke('open_data_dir');
+    $('#btn-listen').onclick = (e) => busy(e.target, async () => {
+      await invoke('set_listen', {listen: $('#listen').value});
+      show('loading');
+    });
+
+    init().catch((e) => {
+      $('#error-text').textContent = String(e);
+      show('error');
+    });
+  </script>
+</body>
+</html>

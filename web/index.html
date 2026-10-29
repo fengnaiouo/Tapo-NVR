@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tapo NVR</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/i18n.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">📹 Tapo NVR</div>
+    <div class="layout-switch" role="group" aria-label="版面">
+      <button data-layout="auto" class="active">自動</button>
+      <button data-layout="1">1</button>
+      <button data-layout="2">4</button>
+      <button data-layout="3">9</button>
+    </div>
+    <div class="spacer"></div>
+    <select id="stream-mode" title="串流模式">
+      <option value="auto">自動模式</option>
+      <option value="webrtc,mse">WebRTC（區網）</option>
+      <option value="mse">MSE（外網）</option>
+    </select>
+    <button id="btn-notify" title="啟用桌面通知">🔔</button>
+    <a class="button" href="/playback.html" title="錄影回放">⏪</a>
+    <button id="btn-events" title="事件紀錄">📋 <span id="event-count" class="count" hidden>0</span></button>
+    <a class="button" href="/settings.html" title="設定">⚙</a>
+    <button id="btn-logout" title="登出">⏻</button>
+  </header>
+
+  <main id="grid" class="grid"></main>
+
+  <aside id="events" class="drawer" hidden>
+    <div class="drawer-head">
+      <h2>事件紀錄</h2>
+      <select id="event-filter"><option value="">全部攝影機</option></select>
+      <button id="btn-events-close">✕</button>
+    </div>
+    <ul id="event-list" class="event-list"></ul>
+  </aside>
+
+  <section id="focus" class="focus" hidden>
+    <div class="focus-view">
+      <div class="viewport" id="focus-viewport"></div>
+      <div id="focus-privacy" class="privacy-cover" hidden>
+        <div>🔒 隱私模式已開啟，攝影機已停止拍攝</div>
+        <button id="focus-privacy-off">關閉隱私模式</button>
+      </div>
+      <div class="focus-title"><span id="focus-name" data-no-i18n></span> <span id="focus-mode" class="mode"></span></div>
+      <button id="btn-focus-close" class="focus-close">✕</button>
+    </div>
+    <div class="focus-panel">
+      <section id="dev-section">
+        <h3>攝影機設定 <button id="dev-refresh" class="link" title="重新讀取">↻</button></h3>
+        <p id="dev-missing" class="hint" hidden>
+          隱私模式、夜視、偵測靈敏度、移動追蹤、SD 卡等控制，需要 TP-Link 雲端密碼。
+          <a href="/settings.html#cameras">前往設定 →</a>
+        </p>
+        <div id="dev-controls" class="dev-controls">
+          <p id="dev-error" class="error" hidden></p>
+          <label class="sw">🔒 隱私模式<input type="checkbox" data-dev="privacy"></label>
+          <label class="sw">🌙 夜視模式
+            <select data-dev="night_vision">
+              <option value="auto">自動</option>
+              <option value="on">開啟</option>
+              <option value="off">關閉</option>
+            </select>
+          </label>
+          <label class="sw">🏃 移動偵測<input type="checkbox" data-dev="motion_detection"></label>
+          <label class="sw">　偵測靈敏度
+            <select data-dev="motion_sensitivity">
+              <option value="low">低</option>
+              <option value="medium">中</option>
+              <option value="high">高</option>
+            </select>
+          </label>
+          <label class="sw">🧍 人形偵測<input type="checkbox" data-dev="person_detection"></label>
+          <label class="sw">🎯 移動追蹤<input type="checkbox" data-dev="auto_track"></label>
+          <p id="dev-sd" class="hint pre"></p>
+          <p id="dev-model" class="hint"></p>
+        </div>
+      </section>
+      <section id="ptz-section">
+        <h3 class="sep">雲台</h3>
+        <div class="dpad">
+          <button data-pan="-1" data-tilt="1">↖</button>
+          <button data-pan="0" data-tilt="1">↑</button>
+          <button data-pan="1" data-tilt="1">↗</button>
+          <button data-pan="-1" data-tilt="0">←</button>
+          <button id="ptz-stop" class="stop">■</button>
+          <button data-pan="1" data-tilt="0">→</button>
+          <button data-pan="-1" data-tilt="-1">↙</button>
+          <button data-pan="0" data-tilt="-1">↓</button>
+          <button data-pan="1" data-tilt="-1">↘</button>
+        </div>
+        <label class="row">速度 <input id="ptz-speed" type="range" min="0.1" max="1" step="0.1" value="0.5"></label>
+        <p class="hint">按住方向鍵移動，鍵盤方向鍵也可以</p>
+        <h3>預設點</h3>
+        <ul id="preset-list" class="preset-list"></ul>
+        <form id="preset-form" class="row">
+          <input id="preset-name" placeholder="新預設點名稱" maxlength="32" required>
+          <button type="submit">儲存目前位置</button>
+        </form>
+      </section>
+      <section>
+        <h3>數位變焦 <small>（數位放大，非光學變焦）</small></h3>
+        <label class="row"><input id="zoom" type="range" min="1" max="4" step="0.1" value="1"> <span id="zoom-val">1.0×</span></label>
+        <p class="hint">滑鼠滾輪縮放、拖曳平移、雙擊還原</p>
+      </section>
+      <section class="row wrap">
+        <button id="btn-audio">🔇 聲音</button>
+        <button id="btn-talk" hidden title="需要在攝影機設定填入 TP-Link 雲端密碼">🎙 對講</button>
+        <button id="btn-snapshot">📷 截圖</button>
+        <button id="btn-playback">⏪ 回放</button>
+        <button id="btn-fullscreen">⛶ 全螢幕</button>
+      </section>
+    </div>
+  </section>
+
+  <div id="lightbox" class="lightbox" hidden title="點擊關閉">
+    <img id="lightbox-img" alt="">
+    <div id="lightbox-caption"></div>
+  </div>
+
+  <div id="toasts" class="toasts"></div>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
