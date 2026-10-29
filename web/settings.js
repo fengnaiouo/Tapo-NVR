@@ -636,13 +636,29 @@ async function loadAbout() {
   }
 }
 $('#btn-check-update').onclick = async (e) => {
-  e.target.disabled = true;
+  const btn = e.currentTarget;
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = t('檢查中…');
+  $('#update-status').textContent = t('正在檢查 GitHub 上的最新版本…');
   try {
-    renderAbout(await send('POST', '/api/about/check'));
+    const a = await send('POST', '/api/about/check');
+    renderAbout(a);
+    if (a.update?.error) {
+      toast(a.update.error, 'error');
+    } else if (a.update_available) {
+      toast(t('🎉 有新版本 v{v} 可以更新', {v: a.update.latest}));
+      // 桌面版：同時在右下角顯示更新卡片，可直接更新
+      if (a.desktop && isDesktopClient) desktopCommand('update-check');
+    } else {
+      toast(t('✅ 目前已是最新版本（v{v}）', {v: a.version}));
+    }
   } catch (err) {
+    $('#update-status').textContent = err.message;
     toast(err.message, 'error');
   } finally {
-    e.target.disabled = false;
+    btn.disabled = false;
+    btn.textContent = label;
   }
 };
 $('#btn-install-update').onclick = () => desktopCommand('update-install');

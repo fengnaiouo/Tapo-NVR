@@ -2,7 +2,7 @@
 
 mod toast;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
@@ -79,17 +79,106 @@ struct AppState {
 // ---------------------------------------------------------------------------
 // 路徑與偏好設定
 
-fn data_dir(app: &AppHandle) -> PathBuf {
-    app.path().app_data_dir().expect("app data dir")
+/// 所有資料都放在安裝資料夾（例如 D:\Tapo NVR）：
+///   data\     設定資料庫、事件截圖、desktop.json
+///   logs\     記錄檔
+///   webview\  內嵌瀏覽器的資料
+///   cache\    暫存（遠端模式的通知截圖）
+/// 安裝資料夾無法寫入時（例如裝在 C:\Program Files）改用 %APPDATA%\com.tapo-nvr.desktop。
+fn app_root() -> &'static PathBuf {
+    static ROOT: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+    ROOT.get_or_init(|| {
+        if let Some(dir) = std::env::current_exe().ok().and_then(|e| e.parent().map(PathBuf::from)) {
+            let probe = dir.join("data");
+            let writable = std::fs::create_dir_all(&probe).is_ok() && {
+                let f = probe.join(".write-test");
+                let ok = std::fs::write(&f, b"ok").is_ok();
+                let _ = std::fs::remove_file(&f);
+                ok
+            };
+            if writable {
+                return dir;
+            }
+        }
+        legacy_appdata_dir().unwrap_or_else(|| PathBuf::from("."))
+    })
 }
 
-/// 伺服器資料夾：tapo-nvr.db（設定、事件，機密以 DPAPI 加密）與 snapshots/
+/// 0.4.3 以前存放資料的位置
+fn legacy_appdata_dir() -> Option<PathBuf> {
+    std::env::var_os("APPDATA").map(|a| PathBuf::from(a).join(IDENTIFIER))
+}
+
+fn legacy_localappdata_dir() -> Option<PathBuf> {
+    std::env::var_os("LOCALAPPDATA").map(|a| PathBuf::from(a).join(IDENTIFIER))
+}
+
+/// 資料夾：tapo-nvr.db（設定、事件，機密以 DPAPI 加密）、snapshots/、desktop.json
+fn data_dir(_app: &AppHandle) -> PathBuf {
+    app_root().join("data")
+}
+
 fn server_data_dir(app: &AppHandle) -> PathBuf {
-    data_dir(app).join("data")
+    data_dir(app)
 }
 
 fn prefs_path(app: &AppHandle) -> PathBuf {
     data_dir(app).join("desktop.json")
+}
+
+fn log_dir() -> PathBuf {
+    app_root().join("logs")
+}
+
+/// 舊版（資料在 AppData）升級：把資料搬到安裝資料夾，只在新位置還沒有資料庫時執行一次
+fn migrate_from_appdata() {
+    // 開發中（從 target 資料夾執行）不搬移，避免把正式安裝的資料搬進編譯資料夾
+    let dev = std::env::current_exe()
+        .map(|p| p.to_string_lossy().to_lowercase().contains("\\target\\"))
+        .unwrap_or(true);
+    if dev {
+        return;
+    }
+    let new_data = app_root().join("data");
+    let Some(old_root) = legacy_appdata_dir() else { return };
+    if old_root == *app_root() || new_data.join(tapo_nvr::store::DB_FILE).exists() {
+        return;
+    }
+    let old_data = old_root.join("data");
+    if !old_data.join(tapo_nvr::store::DB_FILE).exists() && !old_root.join("config.toml").exists() {
+        return;
+    }
+    fn copy_dir(from: &Path, to: &Path) -> std::io::Result<()> {
+        std::fs::create_dir_all(to)?;
+        for entry in std::fs::read_dir(from)? {
+            let entry = entry?;
+            let target = to.join(entry.file_name());
+            if entry.file_type()?.is_dir() {
+                copy_dir(&entry.path(), &target)?;
+            } else {
+                std::fs::copy(entry.path(), &target)?;
+            }
+        }
+        Ok(())
+    }
+    let mut ok = true;
+    if old_data.exists() {
+        ok &= copy_dir(&old_data, &new_data).is_ok();
+    }
+    for name in ["desktop.json", "config.toml"] {
+        let f = old_root.join(name);
+        if f.exists() {
+            ok &= std::fs::copy(&f, new_data.join(name)).is_ok();
+        }
+    }
+    if ok {
+        // 確認複製成功才刪除舊資料；舊的內嵌瀏覽器資料與記錄檔也一併清掉
+        let _ = std::fs::remove_dir_all(&old_root);
+        if let Some(local) = legacy_localappdata_dir() {
+            let _ = std::fs::remove_dir_all(local);
+        }
+        eprintln!("已將資料從 {} 搬到 {}", old_root.display(), new_data.display());
+    }
 }
 
 fn load_prefs(app: &AppHandle) -> Prefs {
@@ -408,7 +497,8 @@ fn chrono_like_local(ts: &str) -> Option<String> {
 }
 
 async fn download_snapshot(app: &AppHandle, base: &str, token: &str, name: &str) -> Option<PathBuf> {
-    let dir = app.path().app_cache_dir().ok()?.join("toasts");
+    let _ = app;
+    let dir = app_root().join("cache").join("toasts");
     std::fs::create_dir_all(&dir).ok()?;
     let bytes = http()
         .get(format!("{base}/api/snapshots/{name}"))
@@ -949,8 +1039,8 @@ async fn back_to_app(app: AppHandle) -> Result<(), String> {
 
 // ---------------------------------------------------------------------------
 
-fn init_logging(app: &AppHandle) {
-    let dir = app.path().app_log_dir().unwrap_or_else(|_| data_dir(app).join("logs"));
+fn init_logging(_app: &AppHandle) {
+    let dir = log_dir();
     use tracing_subscriber::layer::SubscriberExt;
     use tracing_subscriber::util::SubscriberInitExt;
     let _ = std::fs::create_dir_all(&dir);
@@ -1071,7 +1161,9 @@ fn main() {
         ])
         .setup(move |app| {
             let handle = app.handle().clone();
+            migrate_from_appdata();
             init_logging(&handle);
+            tracing::info!("資料夾：{}", app_root().display());
             toast::init(IDENTIFIER);
             let prefs = load_prefs(&handle);
             let mode = prefs.mode;
@@ -1087,6 +1179,8 @@ fn main() {
                 .inner_size(1280.0, 800.0)
                 .min_inner_size(640.0, 420.0)
                 .visible(!start_hidden)
+                // 內嵌瀏覽器（WebView2）的資料也放在安裝資料夾，不使用 AppData
+                .data_directory(app_root().join("webview"))
                 .initialization_script("try { localStorage.setItem('client', 'desktop'); } catch (e) {}")
                 .on_navigation(move |url| {
                     if url.host_str() == Some("tapo-app.invalid") {

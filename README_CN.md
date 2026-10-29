@@ -1,4 +1,4 @@
-﻿# Tapo NVR
+# Tapo NVR
 
 [English](README.md) | [繁體中文](README_TW.md) | **简体中文** | [日本語](README_JP.md) | [한국어](README_KO.md)
 
@@ -39,7 +39,8 @@
 4. **⚙ 设置 → 录像**：选择录像文件夹（建议空间大的硬盘），再为每台摄像头选择录像模式
 5. （可选）填入 TP-Link 账号的密码，即可使用隐私模式、夜视、双向语音等控制功能。只需要密码，摄像头本机登录账号固定为 `admin`
 
-- 数据位置：`%APPDATA%\com.tapo-nvr.desktop\data\tapo-nvr.db`（设置、事件）与 `snapshots\`；录像在你选的文件夹
+- 数据都保存在安装文件夹（例如 `D:\Tapo NVR\`）：`data\`（设置数据库、事件、截图）、`logs\`、`webview\`；录像在你选的文件夹。更新时数据会保留；卸载时勾选「删除应用程序数据」才会删除
+- 安装文件夹无法写入时（例如装在 `C:\Program Files`），改用 `%APPDATA%\com.tapo-nvr.desktop\`
 - 从 0.2 版升级时，旧的 `config.toml` 会自动导入数据库，并清除其中的密码
 - 系统托盘菜单：录像回放、设置、桌面通知开关、开机自动启动、打开录像文件夹、检查更新
 - 「应用程序偏好设置」可以切换成**连接到其他电脑**，只当观看端
@@ -117,3 +118,7 @@ docs/     GitHub Pages 網站與文件
 - **登录保护**：Tapo 摄像头多次密码错误会锁定，本程序在密码错误时会停止重试
 - **浏览器通知**需要 HTTPS 或 localhost；桌面版使用 Windows 原生通知
 - 本项目与 TP-Link 无关，Tapo 为 TP-Link 的商标
+
+## 许可证
+
+[GNU AGPL-3.0](LICENSE)。修改 Tapo NVR 并提供给他人使用（包括通过网络提供服务）时，必须以相同许可证公开源代码。安装包附带的程序（go2rtc、FFmpeg）请见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

@@ -453,7 +453,13 @@
     "高畫質（2K 主串流）": "High (2K main stream)",
     "標準（子串流，省頻寬）": "Standard (sub stream, saves bandwidth)",
     "標準（子串流，省頻寬，建議）": "Standard (sub stream, saves bandwidth, recommended)",
-    "高畫質（2K 主串流，較耗網路與效能）": "High (2K main stream, uses more bandwidth and CPU)"
+    "高畫質（2K 主串流，較耗網路與效能）": "High (2K main stream, uses more bandwidth and CPU)",
+    "授權：": "License: ",
+    "取得原始碼": "Source code",
+    "第三方軟體": "Third-party software",
+    "檢查中…": "Checking…",
+    "正在檢查 GitHub 上的最新版本…": "Checking GitHub for the latest version…",
+    "✅ 目前已是最新版本（v{v}）": "✅ You are on the latest version (v{v})"
   }/*END*/;
 
   const LOCALES = {'zh-TW': 'zh-TW', 'zh-CN': 'zh-CN', en: 'en-US'};

@@ -103,7 +103,7 @@ body:
       description: |
         Settings → System & logs → System log → "Warnings and errors only" → Copy.
         設定 →「系統與記錄」→ 系統記錄 →「只看警告與錯誤」→ 複製。
-        Desktop log file / 桌面版記錄檔：`%LOCALAPPDATA%\com.tapo-nvr.desktop\logs\tapo-nvr.log`
+        Desktop log file / 桌面版記錄檔：`<install folder / 安裝資料夾>\logs\tapo-nvr.log`
       render: text
 
   - type: textarea

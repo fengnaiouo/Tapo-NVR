@@ -39,7 +39,8 @@ Rust로 개발된 TP-Link Tapo 카메라용 무료 오픈소스 모니터링·�
 4. **⚙ 설정 → 녹화**: 녹화 폴더 선택(용량이 큰 드라이브 권장) 후 카메라별 녹화 모드 선택
 5. (선택) TP-Link 계정 비밀번호를 입력하면 사생활 보호 모드, 야간 모드, 양방향 오디오 등을 사용할 수 있습니다. 비밀번호만 필요하며 카메라의 로컬 로그인 사용자는 항상 `admin`입니다
 
-- 데이터 위치: `%APPDATA%\com.tapo-nvr.desktop\data\tapo-nvr.db`(설정, 이벤트)와 `snapshots\`; 녹화 파일은 선택한 폴더에 저장
+- 데이터는 설치 폴더(예: `D:\Tapo NVR\`)에 저장됩니다: `data\`(설정 데이터베이스, 이벤트, 스냅샷), `logs\`, `webview\`. 녹화 파일은 선택한 폴더에 저장됩니다. 업데이트해도 데이터는 유지되며, 제거할 때 "애플리케이션 데이터 삭제"를 선택한 경우에만 삭제됩니다
+- 설치 폴더에 쓸 수 없는 경우(예: `C:\Program Files`) `%APPDATA%\com.tapo-nvr.desktop\`를 사용합니다
 - 0.2.x에서 업그레이드하면 기존 `config.toml`을 자동으로 가져오고 파일 안의 비밀번호는 삭제됩니다
 - **앱 환경설정**에서 **다른 PC에 연결** 모드로 전환하면 시청 전용으로 사용할 수 있습니다
 
@@ -80,3 +81,7 @@ New-NetFirewallRule -DisplayName "Tapo NVR WebRTC TCP" -Direction Inbound -Proto
 - **양방향 오디오**는 TP-Link 계정 비밀번호가 필요하며 로컬, 데스크톱 앱 또는 HTTPS 환경에서 사용할 수 있습니다. Cloudflare Tunnel을 통해서는 사용할 수 없습니다
 - **잠금 방지**: Tapo 카메라는 비밀번호를 여러 번 틀리면 잠기므로, 비밀번호가 틀리면 재시도를 중단합니다
 - 이 프로젝트는 TP-Link와 관련이 없습니다. Tapo는 TP-Link의 상표입니다
+
+## 라이선스
+
+[GNU AGPL-3.0](LICENSE). Tapo NVR을 수정하여 다른 사람에게 제공하는 경우(네트워크를 통한 서비스 포함) 같은 라이선스로 소스 코드를 공개해야 합니다. 함께 배포되는 프로그램(go2rtc, FFmpeg)은 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)를 참고하세요.

@@ -1,4 +1,4 @@
-﻿# Tapo NVR
+# Tapo NVR
 
 **English** | [繁體中文](README_TW.md) | [简体中文](README_CN.md) | [日本語](README_JP.md) | [한국어](README_KO.md)
 
@@ -39,7 +39,8 @@ A free, open-source monitoring and recording system for TP-Link Tapo cameras, wr
 4. **⚙ Settings → Recording**: choose a recording folder (a large drive is recommended), then pick a recording mode per camera
 5. (Optional) Enter the TP-Link account password to enable privacy mode, night vision, two-way audio and other controls. Only the password is needed — the camera's local login user is always `admin`
 
-- Data: `%APPDATA%\com.tapo-nvr.desktop\data\tapo-nvr.db` (settings, events) and `snapshots\`; recordings go to the folder you choose
+- Data is stored in the install folder (e.g. `D:\Tapo NVR\`): `data\` (settings database, events, snapshots), `logs\`, `webview\`. Recordings go to the folder you choose. Updates keep the data; uninstalling removes it only if you tick "Delete application data"
+- If the install folder is not writable (e.g. under `C:\Program Files`), `%APPDATA%\com.tapo-nvr.desktop\` is used instead
 - Upgrading from 0.2.x: the old `config.toml` is imported automatically and its passwords are removed
 - Tray menu: playback, settings, notifications on/off, start with Windows, open recordings folder, check for updates
 - **App preferences** can switch to **Connect to another PC**, using this app as a viewer only
@@ -117,3 +118,7 @@ Updates are signed with a private key (`%USERPROFILE%\.tauri\tapo-nvr.key`). **B
 - **Lockout protection**: Tapo cameras lock after repeated wrong passwords, so Tapo NVR stops retrying when a password is wrong
 - **Browser notifications** need HTTPS or localhost; the desktop app uses native Windows notifications
 - This project is not affiliated with TP-Link. Tapo is a trademark of TP-Link.
+
+## License
+
+[GNU AGPL-3.0](LICENSE). If you modify Tapo NVR and offer it to others (including over a network), you must publish your source code under the same license. Bundled programs (go2rtc, FFmpeg) are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

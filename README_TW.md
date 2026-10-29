@@ -39,7 +39,8 @@
 4. **⚙ 設定 → 錄影**：選擇錄影資料夾（建議空間大的硬碟），再為每台攝影機選擇錄影模式
 5. （選用）填入 TP-Link 帳號的密碼，即可使用隱私模式、夜視、雙向語音等控制功能。只需要密碼，攝影機本機登入帳號固定為 `admin`
 
-- 資料位置：`%APPDATA%\com.tapo-nvr.desktop\data\tapo-nvr.db`（設定、事件）與 `snapshots\`；錄影在你選的資料夾
+- 資料都存在安裝資料夾（例如 `D:\Tapo NVR\`）：`data\`（設定資料庫、事件、截圖）、`logs\`、`webview\`；錄影在你選的資料夾。更新時資料會保留；解除安裝時勾選「刪除應用程式資料」才會刪除
+- 安裝資料夾無法寫入時（例如裝在 `C:\Program Files`），改用 `%APPDATA%\com.tapo-nvr.desktop\`
 - 從 0.2 版升級時，舊的 `config.toml` 會自動匯入資料庫，並清除其中的密碼
 - 系統匣選單：錄影回放、設定、桌面通知開關、開機自動啟動、開啟錄影資料夾、檢查更新
 - 「應用程式偏好設定」可以切換成**連線到其他電腦**，只當觀看端
@@ -117,3 +118,7 @@ docs/     GitHub Pages 網站與文件
 - **登入保護**：Tapo 攝影機多次密碼錯誤會鎖定，本程式在密碼錯誤時會停止重試
 - **瀏覽器通知**需要 HTTPS 或 localhost；桌面版使用 Windows 原生通知
 - 本專案與 TP-Link 無關，Tapo 為 TP-Link 的商標
+
+## 授權
+
+[GNU AGPL-3.0](LICENSE)。修改 Tapo NVR 並提供給他人使用（包含透過網路提供服務）時，必須以相同授權公開原始碼。安裝檔附帶的程式（go2rtc、FFmpeg）請見 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
