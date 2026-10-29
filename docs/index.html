@@ -134,6 +134,7 @@
 
     footer { border-top: 1px solid var(--border); padding: 30px 0; color: var(--muted); font-size: 13.5px; }
     footer .wrap { display: flex; gap: 16px; flex-wrap: wrap; justify-content: space-between; }
+    footer .wrap.readmes { justify-content: flex-start; gap: 14px; margin-top: 12px; }
   </style>
 </head>
 <body>
@@ -151,6 +152,8 @@
         <option value="zh-TW">繁體中文</option>
         <option value="zh-CN">简体中文</option>
         <option value="en">English</option>
+        <option value="ja">日本語</option>
+        <option value="ko">한국어</option>
       </select>
     </div>
   </nav>
@@ -196,6 +199,9 @@
         <div class="card"><div class="ico">🔍</div><h3 data-t="f7t"></h3><p data-t="f7d"></p></div>
         <div class="card"><div class="ico">🌐</div><h3 data-t="f8t"></h3><p data-t="f8d"></p></div>
         <div class="card"><div class="ico">🖥️</div><h3 data-t="f9t"></h3><p data-t="f9d"></p></div>
+        <div class="card"><div class="ico">⬆️</div><h3 data-t="f10t"></h3><p data-t="f10d"></p></div>
+        <div class="card"><div class="ico">🗣️</div><h3 data-t="f11t"></h3><p data-t="f11d"></p></div>
+        <div class="card"><div class="ico">🎞️</div><h3 data-t="f12t"></h3><p data-t="f12d"></p></div>
       </div>
     </div>
   </section>
@@ -243,6 +249,8 @@
       <details><summary data-t="q3"></summary><p data-t="a3"></p></details>
       <details><summary data-t="q4"></summary><p data-t="a4"></p></details>
       <details><summary data-t="q5"></summary><p data-t="a5"></p></details>
+      <details><summary data-t="q6"></summary><p data-t="a6"></p></details>
+      <details><summary data-t="q7"></summary><p data-t="a7"></p></details>
     </div>
   </section>
 
@@ -264,6 +272,14 @@
       <span>© 2026 Tapo NVR · <span data-t="license"></span></span>
       <span data-t="disclaimer"></span>
     </div>
+    <div class="wrap readmes">
+      <span>README:</span>
+      <a href="https://github.com/fengnaiouo/Tapo-NVR/blob/main/README.md">English</a>
+      <a href="https://github.com/fengnaiouo/Tapo-NVR/blob/main/README_TW.md">繁體中文</a>
+      <a href="https://github.com/fengnaiouo/Tapo-NVR/blob/main/README_CN.md">简体中文</a>
+      <a href="https://github.com/fengnaiouo/Tapo-NVR/blob/main/README_JP.md">日本語</a>
+      <a href="https://github.com/fengnaiouo/Tapo-NVR/blob/main/README_KO.md">한국어</a>
+    </div>
   </footer>
 
   <script>
@@ -284,7 +300,10 @@
         f6t: '雙向語音', f6d: '直接在電腦上對攝影機說話。',
         f7t: '支援所有 Tapo 機型', f7d: '自動掃描區網找到攝影機（ONVIF + TP-Link TDP），沒有 RTSP 的機型也能使用。',
         f8t: '遠端觀看', f8d: '手機、平板用瀏覽器即可觀看；搭配 Cloudflare Tunnel 從外網安全連線。',
-        f9t: '常駐背景', f9d: '系統匣常駐、開機自動啟動、關閉視窗後繼續錄影，並支援自動更新。',
+        f9t: '常駐背景', f9d: '系統匣常駐、開機自動啟動、關閉視窗後繼續錄影與偵測。',
+        f10t: '應用程式內更新', f10d: '有新版本時在視窗右下角提示，一鍵下載（含進度條）、安裝並自動重新啟動，不會跳出系統視窗打擾你。',
+        f11t: '多國語言', f11d: '介面支援繁體中文、简体中文、English，依系統自動選擇；安裝程式也會依系統語言顯示。',
+        f12t: '標準 MP4 檔案', f12d: '錄影存成一般 MP4，任何播放器都能開啟；錄製中當機也不會損壞檔案。',
         startTitle: '四個步驟開始使用', startSub: '從安裝到開始錄影，大約五分鐘。',
         s1t: '設定攝影機', s1d: '在 Tapo App：進階設定 → 攝影機帳戶，建立帳號密碼，並開啟「第三方相容性」。',
         s2t: '安裝 Tapo NVR', s2d: '下載安裝檔並執行，第一次開啟時建立管理員帳號。',
@@ -298,10 +317,12 @@
         faqTitle: '常見問題',
         q1: '需要 Tapo Care 訂閱嗎？', a1: '不需要。Tapo NVR 直接從區網連線攝影機並錄影到你的硬碟。',
         q2: '支援哪些攝影機？', a2: '支援 TP-Link Tapo 系列（例如 C100、C200、C210、C220、C310、C320WS、C500、C520WS 等）。有 RTSP / ONVIF 的機型功能最完整；沒有的機型會改用 Tapo 私有串流。',
-        q3: '什麼時候需要 TP-Link 雲端密碼？', a3: '隱私模式、夜視、偵測設定、雙向語音等控制功能需要使用 TP-Link 帳號密碼登入攝影機。只看畫面和錄影不需要。',
+        q3: '什麼時候需要 TP-Link 帳號密碼？', a3: '隱私模式、夜視、偵測設定、雙向語音等控制功能需要。只需要填密碼（攝影機本機登入帳號固定為 admin，不需要 Email）。只看畫面和錄影不需要。',
         q4: '可以從外面用手機看嗎？', a4: '可以。區網內直接用瀏覽器開啟；外網建議使用 Cloudflare Tunnel，不需要開放路由器連接埠。',
         q5: '錄影會占用多少空間？', a5: '2K 連續錄影約每台每天 15–25 GB。可以改用事件錄影，並設定保留天數與容量上限。',
-        dlTitle: '立即下載', dlSub: '免費、開源，不需要註冊帳號。', dlReq: '需要 Windows 10 / 11（64 位元）與 WebView2（Windows 11 已內建）。',
+        q6: '怎麼更新到新版本？', a6: '桌面版會在啟動後及每 6 小時自動檢查。有新版本時視窗右下角會出現更新卡片，按「立即更新」即可，設定與錄影都會保留。也可以從系統匣選單 →「檢查更新」手動檢查。',
+        q7: '我的設定和密碼存在哪裡？', a7: '存在你電腦上的 SQLite 資料庫（%APPDATA%\\com.tapo-nvr.desktop\\data），攝影機密碼以 Windows DPAPI 加密，只有你的 Windows 帳號能解密。不會上傳到任何雲端。',
+        dlTitle: '立即下載', dlSub: '免費、開源，不需要註冊帳號。', dlReq: '需要 Windows 10 / 11（64 位元）與 WebView2（Windows 11 已內建）。安裝程式支援 English / 繁體中文 / 简体中文。',
         allReleases: '所有版本與更新紀錄', license: '開源軟體', disclaimer: '本專案與 TP-Link 無關，Tapo 為 TP-Link 的商標。',
         version: '最新版本 {v}', sizeMB: ' · {n} MB',
       },
@@ -331,7 +352,7 @@
         f3t: '时间轴回放',
         f3d: '24 小时时间轴、事件标记、0.5–16 倍速、截屏，并可导出 MP4 片段。',
         f4t: '移动通知',
-        f4d: 'Windows 原生通知、浏览器通知，以及透过 ntfy 推播到手机，都附上截屏。',
+        f4d: 'Windows 原生通知、浏览器通知，以及透过 ntfy 推送到手机，都附上截屏。',
         f5t: '云台与摄像头控制',
         f5d: '按住转动、预设点、隐私模式、夜视、移动侦测灵敏度、人形侦测、移动追踪。',
         f6t: '双向语音',
@@ -340,8 +361,14 @@
         f7d: '自动扫描局域网找到摄像头（ONVIF + TP-Link TDP），没有 RTSP 的机型也能使用。',
         f8t: '远程观看',
         f8d: '手机、平板用浏览器即可观看；搭配 Cloudflare Tunnel 从外网安全连接。',
-        f9t: '常驻背景',
-        f9d: '系统匣常驻、开机自动启动、关闭窗口后继续录像，并支持自动更新。',
+        f9t: '后台常驻',
+        f9d: '系统托盘常驻、开机自动启动、关闭窗口后继续录像与侦测。',
+        f10t: '应用程序内更新',
+        f10d: '有新版本时在窗口右下角提示，一键下载（含进度条）、安装并自动重新启动，不会跳出系统窗口打扰你。',
+        f11t: '多国语言',
+        f11d: '界面支持繁体中文、简体中文、English，依系统自动选择；安装程序也会依系统语言显示。',
+        f12t: '标准 MP4 文件',
+        f12d: '录像存成一般 MP4，任何播放器都能打开；录制中当机也不会损坏文件。',
         startTitle: '四个步骤开始使用',
         startSub: '从安装到开始录像，大约五分钟。',
         s1t: '设置摄像头',
@@ -369,16 +396,20 @@
         a1: '不需要。Tapo NVR 直接从局域网连接摄像头并录像到你的硬盘。',
         q2: '支持哪些摄像头？',
         a2: '支持 TP-Link Tapo 系列（例如 C100、C200、C210、C220、C310、C320WS、C500、C520WS 等）。有 RTSP / ONVIF 的机型功能最完整；没有的机型会改用 Tapo 私有视频流。',
-        q3: '什么时候需要 TP-Link 云端密码？',
-        a3: '隐私模式、夜视、侦测设置、双向语音等控制功能需要使用 TP-Link 账号密码登录摄像头。只看画面和录像不需要。',
+        q3: '什么时候需要 TP-Link 账号密码？',
+        a3: '隐私模式、夜视、侦测设置、双向语音等控制功能需要。只需要填密码（摄像头本机登录账号固定为 admin，不需要 Email）。只看画面和录像不需要。',
         q4: '可以从外面用手机看吗？',
         a4: '可以。局域网内直接用浏览器打开；外网建议使用 Cloudflare Tunnel，不需要开放路由器连接端口。',
         q5: '录像会占用多少空间？',
         a5: '2K 连续录像约每台每天 15–25 GB。可以改用事件录像，并设置保留天数与容量上限。',
+        q6: '怎么更新到新版本？',
+        a6: '桌面版会在启动后及每 6 小时自动检查。有新版本时窗口右下角会出现更新卡片，按「立即更新」即可，设置与录像都会保留。也可以从系统托盘菜单 →「检查更新」手动检查。',
+        q7: '我的设置和密码存在哪里？',
+        a7: '存在你电脑上的 SQLite 数据库（%APPDATA%\\com.tapo-nvr.desktop\\data），摄像头密码以 Windows DPAPI 加密，只有你的 Windows 账号能解密。不会上传到任何云端。',
         dlTitle: '立即下载',
         dlSub: '免费、开源，不需要注册账号。',
-        dlReq: '需要 Windows 10 / 11（64 位）与 WebView2（Windows 11 已内置）。',
-        allReleases: '所有版本与更新纪录',
+        dlReq: '需要 Windows 10 / 11（64 位）与 WebView2（Windows 11 已内置）。安装程序支持 English / 繁体中文 / 简体中文。',
+        allReleases: '所有版本与更新记录',
         license: '开源软件',
         disclaimer: '本项目与 TP-Link 无关，Tapo 为 TP-Link 的商标。',
         version: '最新版本 {v}',
@@ -400,7 +431,10 @@
         f6t: 'Two-way audio', f6d: 'Talk to your camera right from your PC.',
         f7t: 'All Tapo models', f7d: 'Finds cameras on your LAN automatically (ONVIF + TP-Link TDP). Works even with models without RTSP.',
         f8t: 'Remote viewing', f8d: 'Watch from any phone or tablet browser; use Cloudflare Tunnel for secure access from anywhere.',
-        f9t: 'Runs in the background', f9d: 'Tray icon, start with Windows, keeps recording when the window is closed, auto-updates.',
+        f9t: 'Runs in the background', f9d: 'Tray icon, start with Windows, keeps recording and detecting when the window is closed.',
+        f10t: 'In-app updates', f10d: 'A card in the corner of the window tells you about new versions. One click downloads (with progress), installs and restarts — no pop-ups.',
+        f11t: 'Multilingual', f11d: 'UI in Traditional Chinese, Simplified Chinese and English, picked from your system language — the installer too.',
+        f12t: 'Standard MP4 files', f12d: 'Recordings are plain MP4 files that play anywhere, and stay intact even if the PC crashes while recording.',
         startTitle: 'Up and running in four steps', startSub: 'About five minutes from install to recording.',
         s1t: 'Prepare the camera', s1d: 'In the Tapo app: Advanced Settings → Camera Account, create credentials and enable Third-Party Compatibility.',
         s2t: 'Install Tapo NVR', s2d: 'Download and run the installer, then create the admin account on first launch.',
@@ -414,12 +448,192 @@
         faqTitle: 'FAQ',
         q1: 'Do I need a Tapo Care subscription?', a1: 'No. Tapo NVR connects to your cameras over the LAN and records to your own drive.',
         q2: 'Which cameras are supported?', a2: 'TP-Link Tapo cameras such as C100, C200, C210, C220, C310, C320WS, C500, C520WS and more. Models with RTSP / ONVIF get the full feature set; others use the Tapo private stream.',
-        q3: 'When do I need my TP-Link cloud password?', a3: 'For controls such as privacy mode, night vision, detection settings and two-way audio. Viewing and recording do not need it.',
+        q3: 'When do I need my TP-Link account password?', a3: 'For controls such as privacy mode, night vision, detection settings and two-way audio. Only the password is needed — the camera\'s local user is always admin, no email required. Viewing and recording do not need it.',
         q4: 'Can I watch from my phone outside home?', a4: 'Yes. On the LAN just open it in a browser; from outside we recommend Cloudflare Tunnel — no router port forwarding required.',
         q5: 'How much disk space does recording use?', a5: 'Continuous 2K recording uses about 15–25 GB per camera per day. Use motion recording and set retention limits to save space.',
-        dlTitle: 'Download now', dlSub: 'Free and open source. No account required.', dlReq: 'Requires Windows 10 / 11 (64-bit) and WebView2 (built into Windows 11).',
+        q6: 'How do I update to a new version?', a6: 'The desktop app checks after launch and every 6 hours. When a new version is out, a card appears in the bottom-right corner — click "Update now". Settings and recordings are kept. You can also use the tray menu → Check for updates.',
+        q7: 'Where are my settings and passwords stored?', a7: 'In a SQLite database on your PC (%APPDATA%\\com.tapo-nvr.desktop\\data). Camera passwords are encrypted with Windows DPAPI so only your Windows account can decrypt them. Nothing is uploaded to any cloud.',
+        dlTitle: 'Download now', dlSub: 'Free and open source. No account required.', dlReq: 'Requires Windows 10 / 11 (64-bit) and WebView2 (built into Windows 11). Installer in English / Traditional Chinese / Simplified Chinese.',
         allReleases: 'All releases and changelog', license: 'Open-source software', disclaimer: 'Not affiliated with TP-Link. Tapo is a trademark of TP-Link.',
         version: 'Latest {v}', sizeMB: ' · {n} MB',
+      },
+      ja: {
+        title: 'Tapo NVR — TP-Link Tapo カメラの監視・録画ソフト',
+        navFeatures: '機能',
+        navStart: 'はじめかた',
+        navSecurity: 'セキュリティ',
+        navFaq: 'よくある質問',
+        badge: '無料 · オープンソース · サブスク不要',
+        h1a: 'あなたの Tapo カメラを、',
+        h1b: '自分だけの録画サーバーに',
+        lead: 'Windows でライブ視聴、録画、再生、動体検知通知。データはすべてあなたの PC に保存され、クラウドのサブスクリプションは不要です。',
+        download: 'Windows 版をダウンロード',
+        source: 'GitHub のソースコード',
+        metaReq: 'Windows 10 / 11 · 64 ビット',
+        cam1: 'リビング',
+        cam2: '玄関',
+        cam3: 'ガレージ',
+        cam4: '3 階',
+        featTitle: '充実した監視機能',
+        featSub: 'デスクトップ版と Web 版は同じ機能を備え、すべての設定を画面上で変更できます。',
+        f1t: 'ライブ映像',
+        f1d: '複数カメラのグリッド表示、2K メインストリーム、LAN では低遅延 WebRTC、外出先では MSE、デジタルズーム。',
+        f2t: '常時録画・動体録画',
+        f2d: 'カメラごとに常時録画または動体検知時のみの録画（前後の映像付き）を選択。日数と容量で自動削除。',
+        f3t: 'タイムライン再生',
+        f3d: '24 時間タイムライン、イベントマーカー、0.5〜16 倍速、スナップショット、MP4 書き出し。',
+        f4t: '動体検知通知',
+        f4d: 'Windows ネイティブ通知、ブラウザー通知、ntfy によるスマホへのプッシュ通知。すべてスナップショット付き。',
+        f5t: 'パン・チルトとカメラ制御',
+        f5d: '押し続けて移動、プリセット、プライバシーモード、ナイトビジョン、検知感度、人物検知、自動追尾。',
+        f6t: '双方向音声',
+        f6d: 'PC からそのままカメラに話しかけられます。',
+        f7t: 'すべての Tapo 機種に対応',
+        f7d: 'LAN 上のカメラを自動検出（ONVIF + TP-Link TDP）。RTSP 非対応の機種でも使えます。',
+        f8t: 'リモート視聴',
+        f8d: 'スマホやタブレットのブラウザーで視聴。Cloudflare Tunnel で外出先から安全に接続。',
+        f9t: 'バックグラウンド常駐',
+        f9d: 'タスクトレイに常駐し、Windows 起動時に自動起動。ウィンドウを閉じても録画と検知を継続。',
+        f10t: 'アプリ内アップデート',
+        f10d: '新バージョンはウィンドウの右下でお知らせ。ワンクリックでダウンロード（進捗表示付き）、インストール、再起動まで完了します。',
+        f11t: '多言語対応',
+        f11d: 'UI は繁体字中国語・簡体字中国語・英語に対応し、システム言語から自動選択。インストーラーも同様です。',
+        f12t: '標準の MP4 ファイル',
+        f12d: '録画は一般的な MP4 で保存され、どのプレーヤーでも再生可能。録画中に PC が落ちてもファイルは壊れません。',
+        startTitle: '4 ステップではじめる',
+        startSub: 'インストールから録画開始まで約 5 分です。',
+        s1t: 'カメラの準備',
+        s1d: 'Tapo アプリで「高度な設定 → カメラのアカウント」を作成し、「サードパーティ互換性」をオンにします。',
+        s2t: 'Tapo NVR をインストール',
+        s2d: 'インストーラーをダウンロードして実行し、初回起動時に管理者アカウントを作成します。',
+        s3t: 'カメラを追加',
+        s3d: '設定 → カメラ → LAN をスキャンし、カメラを選んでアカウントを入力、接続テストを行います。',
+        s4t: '録画フォルダーを選択',
+        s4d: '設定 → 録画で容量の十分なドライブを選び、カメラごとに録画モードを設定します。',
+        secTitle: 'セキュリティ',
+        secSub: 'カメラ映像とパスワードは重要な情報です。Tapo NVR は設計段階からセキュリティを最優先にしています。',
+        secA: 'データ保護',
+        secA1: '設定は SQLite データベースに保存し、カメラのパスワードは Windows DPAPI で暗号化',
+        secA2: 'パスワードを平文の設定ファイルや環境変数に保存しません',
+        secA3: 'ログインセッションはハッシュ値のみ保存',
+        secA4: '録画とデータはすべてあなたの PC に保存',
+        secB: 'アクセス制御',
+        secB1: 'Argon2 によるパスワードハッシュとログイン試行回数の制限',
+        secB2: 'CSRF 対策。カメラのパスワードはブラウザーに送信されません',
+        secB3: '初期設定は LAN 内からのみ可能',
+        secB4: 'パスワードが間違っている場合は再試行を停止し、カメラのロックを防止',
+        faqTitle: 'よくある質問',
+        q1: 'Tapo Care の契約は必要ですか？',
+        a1: '不要です。Tapo NVR は LAN 経由でカメラに接続し、あなたのドライブに録画します。',
+        q2: 'どのカメラに対応していますか？',
+        a2: 'C100、C200、C210、C220、C310、C320WS、C500、C520WS などの TP-Link Tapo シリーズに対応しています。RTSP / ONVIF 対応機種はすべての機能が使え、非対応機種は Tapo 独自ストリームを使用します。',
+        q3: 'TP-Link アカウントのパスワードはいつ必要ですか？',
+        a3: 'プライバシーモード、ナイトビジョン、検知設定、双方向音声などの制御に必要です。入力するのはパスワードだけで、カメラのローカルユーザーは常に admin です（メールアドレスは不要）。視聴と録画だけなら不要です。',
+        q4: '外出先からスマホで見られますか？',
+        a4: 'はい。LAN 内ではブラウザーで開くだけ。外出先からは Cloudflare Tunnel をおすすめします。ルーターのポート開放は不要です。',
+        q5: '録画にはどれくらいの容量が必要ですか？',
+        a5: '2K の常時録画で 1 台あたり 1 日約 15〜25 GB です。動体録画に切り替えたり、保存日数と容量の上限を設定したりできます。',
+        q6: '新しいバージョンへの更新方法は？',
+        a6: 'デスクトップ版は起動後と 6 時間ごとに自動で確認します。新バージョンがあるとウィンドウ右下にカードが表示されるので、「今すぐ更新」を押すだけです。設定と録画はそのまま残ります。',
+        q7: '設定やパスワードはどこに保存されますか？',
+        a7: 'PC 上の SQLite データベース（%APPDATA%\\com.tapo-nvr.desktop\\data）に保存されます。カメラのパスワードは Windows DPAPI で暗号化され、あなたの Windows アカウントでしか復号できません。クラウドには一切アップロードされません。',
+        dlTitle: '今すぐダウンロード',
+        dlSub: '無料・オープンソース。アカウント登録は不要です。',
+        dlReq: 'Windows 10 / 11（64 ビット）と WebView2（Windows 11 は標準搭載）が必要です。インストーラーは英語・繁体字中国語・簡体字中国語に対応。',
+        allReleases: 'すべてのリリースと更新履歴',
+        license: 'オープンソースソフトウェア',
+        disclaimer: '本プロジェクトは TP-Link とは関係ありません。Tapo は TP-Link の商標です。',
+        version: '最新版 {v}',
+        sizeMB: ' · {n} MB',
+      },
+      ko: {
+        title: 'Tapo NVR — TP-Link Tapo 카메라 모니터링·녹화',
+        navFeatures: '기능',
+        navStart: '시작하기',
+        navSecurity: '보안',
+        navFaq: '자주 묻는 질문',
+        badge: '무료 · 오픈소스 · 구독 불필요',
+        h1a: '내 Tapo 카메라를',
+        h1b: '나만의 녹화 서버로',
+        lead: 'Windows에서 실시간 시청, 녹화, 재생, 움직임 알림까지. 모든 데이터는 내 PC에 저장되며 클라우드 구독이 필요 없습니다.',
+        download: 'Windows용 다운로드',
+        source: 'GitHub 소스 코드',
+        metaReq: 'Windows 10 / 11 · 64비트',
+        cam1: '거실',
+        cam2: '현관',
+        cam3: '차고',
+        cam4: '3층',
+        featTitle: '모니터링에 필요한 모든 기능',
+        featSub: '데스크톱 앱과 웹 버전은 기능이 동일하며 모든 설정을 화면에서 변경할 수 있습니다.',
+        f1t: '실시간 영상',
+        f1d: '다중 카메라 그리드, 2K 메인 스트림, LAN에서 저지연 WebRTC, 외부에서 MSE, 디지털 줌.',
+        f2t: '상시 녹화 또는 움직임 녹화',
+        f2d: '카메라별로 상시 녹화 또는 움직임 감지 시에만 녹화(전후 영상 포함). 기간과 용량에 따라 자동 정리.',
+        f3t: '타임라인 재생',
+        f3d: '24시간 타임라인, 이벤트 표시, 0.5–16배속, 스냅샷, MP4 내보내기.',
+        f4t: '움직임 알림',
+        f4d: 'Windows 기본 알림, 브라우저 알림, ntfy를 통한 휴대폰 푸시 알림. 모두 스냅샷 포함.',
+        f5t: 'PTZ 및 카메라 제어',
+        f5d: '길게 눌러 회전, 프리셋, 사생활 보호 모드, 야간 모드, 감지 감도, 사람 감지, 자동 추적.',
+        f6t: '양방향 오디오',
+        f6d: 'PC에서 바로 카메라로 말할 수 있습니다.',
+        f7t: '모든 Tapo 기종 지원',
+        f7d: 'LAN의 카메라를 자동으로 검색(ONVIF + TP-Link TDP). RTSP가 없는 기종도 사용할 수 있습니다.',
+        f8t: '원격 시청',
+        f8d: '휴대폰이나 태블릿 브라우저로 시청. Cloudflare Tunnel로 외부에서도 안전하게 연결.',
+        f9t: '백그라운드 실행',
+        f9d: '시스템 트레이 상주, Windows 시작 시 자동 실행, 창을 닫아도 녹화와 감지를 계속합니다.',
+        f10t: '앱 내 업데이트',
+        f10d: '새 버전이 나오면 창 오른쪽 아래에 알려 줍니다. 클릭 한 번으로 다운로드(진행률 표시), 설치, 재시작까지 완료됩니다.',
+        f11t: '다국어 지원',
+        f11d: 'UI는 번체 중국어, 간체 중국어, 영어를 지원하며 시스템 언어에 따라 자동 선택됩니다. 설치 프로그램도 마찬가지입니다.',
+        f12t: '표준 MP4 파일',
+        f12d: '녹화 파일은 일반 MP4로 저장되어 어떤 플레이어로도 재생할 수 있으며, 녹화 중 PC가 꺼져도 손상되지 않습니다.',
+        startTitle: '4단계로 시작하기',
+        startSub: '설치부터 녹화 시작까지 약 5분.',
+        s1t: '카메라 준비',
+        s1d: 'Tapo 앱에서 고급 설정 → 카메라 계정을 만들고 "타사 호환성"을 켭니다.',
+        s2t: 'Tapo NVR 설치',
+        s2d: '설치 프로그램을 다운로드해 실행하고, 처음 실행할 때 관리자 계정을 만듭니다.',
+        s3t: '카메라 추가',
+        s3d: '설정 → 카메라 → LAN 검색에서 카메라를 선택하고 카메라 계정을 입력한 뒤 연결을 테스트합니다.',
+        s4t: '녹화 폴더 선택',
+        s4d: '설정 → 녹화에서 공간이 충분한 드라이브를 고르고 카메라별 녹화 모드를 설정합니다.',
+        secTitle: '보안',
+        secSub: '카메라 영상과 비밀번호는 민감한 정보이므로 Tapo NVR은 설계 단계부터 보안을 최우선으로 합니다.',
+        secA: '데이터 보호',
+        secA1: '설정은 SQLite 데이터베이스에 저장되며 카메라 비밀번호는 Windows DPAPI로 암호화',
+        secA2: '비밀번호를 평문 설정 파일이나 환경 변수에 저장하지 않음',
+        secA3: '로그인 세션은 해시만 저장',
+        secA4: '녹화 파일과 데이터는 모두 내 PC에 보관',
+        secB: '접근 제어',
+        secB1: 'Argon2 비밀번호 해시와 로그인 시도 제한',
+        secB2: 'CSRF 방어, 카메라 비밀번호는 브라우저로 전송되지 않음',
+        secB3: '초기 설정은 LAN에서만 가능',
+        secB4: '비밀번호가 틀리면 재시도를 중단해 카메라 잠금 방지',
+        faqTitle: '자주 묻는 질문',
+        q1: 'Tapo Care 구독이 필요한가요?',
+        a1: '아니요. Tapo NVR은 LAN으로 카메라에 연결해 내 드라이브에 녹화합니다.',
+        q2: '어떤 카메라를 지원하나요?',
+        a2: 'C100, C200, C210, C220, C310, C320WS, C500, C520WS 등 TP-Link Tapo 시리즈를 지원합니다. RTSP / ONVIF를 지원하는 기종은 모든 기능을 쓸 수 있고, 그렇지 않은 기종은 Tapo 전용 스트림을 사용합니다.',
+        q3: 'TP-Link 계정 비밀번호는 언제 필요한가요?',
+        a3: '사생활 보호 모드, 야간 모드, 감지 설정, 양방향 오디오 등 제어 기능에 필요합니다. 비밀번호만 입력하면 되며 카메라의 로컬 사용자는 항상 admin입니다(이메일 불필요). 시청과 녹화에는 필요하지 않습니다.',
+        q4: '밖에서 휴대폰으로 볼 수 있나요?',
+        a4: '네. LAN에서는 브라우저로 열기만 하면 되고, 외부에서는 Cloudflare Tunnel을 권장합니다. 공유기 포트 개방이 필요 없습니다.',
+        q5: '녹화에 용량이 얼마나 필요한가요?',
+        a5: '2K 상시 녹화는 카메라 1대당 하루 약 15–25 GB입니다. 움직임 녹화로 바꾸거나 보관 기간과 용량 제한을 설정할 수 있습니다.',
+        q6: '새 버전으로 어떻게 업데이트하나요?',
+        a6: '데스크톱 앱은 실행 후와 6시간마다 자동으로 확인합니다. 새 버전이 있으면 창 오른쪽 아래에 카드가 나타나며 "지금 업데이트"만 누르면 됩니다. 설정과 녹화 파일은 그대로 유지됩니다.',
+        q7: '설정과 비밀번호는 어디에 저장되나요?',
+        a7: 'PC의 SQLite 데이터베이스(%APPDATA%\\com.tapo-nvr.desktop\\data)에 저장됩니다. 카메라 비밀번호는 Windows DPAPI로 암호화되어 내 Windows 계정에서만 복호화할 수 있습니다. 클라우드로는 전혀 업로드되지 않습니다.',
+        dlTitle: '지금 다운로드',
+        dlSub: '무료 오픈소스, 회원 가입이 필요 없습니다.',
+        dlReq: 'Windows 10 / 11(64비트)과 WebView2(Windows 11 기본 내장)가 필요합니다. 설치 프로그램은 영어, 번체 중국어, 간체 중국어를 지원합니다.',
+        allReleases: '모든 릴리스와 변경 기록',
+        license: '오픈소스 소프트웨어',
+        disclaimer: '이 프로젝트는 TP-Link와 관련이 없습니다. Tapo는 TP-Link의 상표입니다.',
+        version: '최신 버전 {v}',
+        sizeMB: ' · {n} MB',
       },
     };
     function detect() {
@@ -429,6 +643,8 @@
         const n = l.toLowerCase();
         if (n.startsWith('zh')) return /cn|sg|hans/.test(n) ? 'zh-CN' : 'zh-TW';
         if (n.startsWith('en')) return 'en';
+        if (n.startsWith('ja')) return 'ja';
+        if (n.startsWith('ko')) return 'ko';
       }
       return 'en';
     }
@@ -437,7 +653,7 @@
     const t = (k, vars = {}) => (DICT[lang][k] ?? DICT.en[k] ?? k).replace(/\{(\w+)\}/g, (_, x) => vars[x] ?? '');
 
     function render() {
-      document.documentElement.lang = lang === 'zh-TW' ? 'zh-Hant' : lang === 'zh-CN' ? 'zh-Hans' : 'en';
+      document.documentElement.lang = {'zh-TW': 'zh-Hant', 'zh-CN': 'zh-Hans'}[lang] || lang;
       document.title = t('title');
       document.querySelectorAll('[data-t]').forEach((el) => el.textContent = t(el.dataset.t));
       document.getElementById('lang').value = lang;
