@@ -85,6 +85,16 @@
       </div>
       <p class="hint" data-t="importHint"></p>
       <p class="hint"><span data-t="dbPath"></span><code id="config-path"></code></p>
+      <details style="margin-top:8px">
+        <summary data-t="resetTitle" style="cursor:pointer"></summary>
+        <form id="reset-form" style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+          <p class="hint" data-t="resetHint"></p>
+          <label><span data-t="username"></span><input name="username" autocomplete="off" required maxlength="32"></label>
+          <label><span data-t="newPassword"></span><input name="password" type="password" autocomplete="new-password" required minlength="8"></label>
+          <label><span data-t="repeatPassword"></span><input name="confirm" type="password" autocomplete="new-password" required></label>
+          <button type="submit" data-t="resetBtn"></button>
+        </form>
+      </details>
     </div>
 
     <form id="remote-panel" hidden>
@@ -140,6 +150,8 @@
         language: '語言', langAuto: '跟隨系統',
         update: '自動更新', updateUrl: '更新來源網址（留空使用預設值）', save: '儲存', checkUpdate: '檢查更新',
         updateDefault: '預設：', back: '← 返回', version: '版本', saved: '已儲存', restarting: '，伺服器重新啟動中…',
+        resetTitle: '🔑 忘記管理員密碼？', resetHint: '在這台電腦上直接設定新的管理員帳號密碼。所有已登入的裝置都會被登出。',
+        newPassword: '新密碼（至少 8 字元）', repeatPassword: '再輸入一次', resetBtn: '重設密碼', mismatch: '兩次輸入的密碼不一致',
       },
       'zh-CN': {
         starting: '正在启动服务器…', connecting: '正在连接服务器…', failTitle: '⚠️ 无法启动',
@@ -155,6 +167,8 @@
         language: '语言', langAuto: '跟随系统',
         update: '自动更新', updateUrl: '更新源网址（留空使用默认值）', save: '保存', checkUpdate: '检查更新',
         updateDefault: '默认：', back: '← 返回', version: '版本', saved: '已保存', restarting: '，服务器正在重新启动…',
+        resetTitle: '🔑 忘记管理员密码？', resetHint: '在这台电脑上直接设置新的管理员账号和密码。所有已登录的设备都会被登出。',
+        newPassword: '新密码（至少 8 个字符）', repeatPassword: '再输入一次', resetBtn: '重置密码', mismatch: '两次输入的密码不一致',
       },
       en: {
         starting: 'Starting server…', connecting: 'Connecting to server…', failTitle: '⚠️ Failed to start',
@@ -170,6 +184,8 @@
         language: 'Language', langAuto: 'System default',
         update: 'Auto update', updateUrl: 'Update URL (leave empty for default)', save: 'Save', checkUpdate: 'Check for updates',
         updateDefault: 'Default: ', back: '← Back', version: 'Version', saved: 'Saved', restarting: ', restarting server…',
+        resetTitle: '🔑 Forgot the admin password?', resetHint: 'Set a new admin username and password directly on this computer. All signed-in devices will be signed out.',
+        newPassword: 'New password (at least 8 characters)', repeatPassword: 'Repeat', resetBtn: 'Reset password', mismatch: 'The passwords do not match',
       },
     };
     function detectLang() {
@@ -255,6 +271,15 @@
       busy(f.querySelector('button'), async () => {
         await invoke('connect_remote', {serverUrl: f.server_url.value, username: f.username.value, password: f.password.value});
         show('loading');
+      });
+    };
+    $('#reset-form').onsubmit = (e) => {
+      e.preventDefault();
+      const f = e.target;
+      if (f.password.value !== f.confirm.value) return msg(t('mismatch'), false);
+      busy(f.querySelector('button'), async () => {
+        msg(await invoke('reset_admin_password', {username: f.username.value, password: f.password.value}));
+        f.reset();
       });
     };
     $('#btn-save-update').onclick = (e) => busy(e.target, async () => {

@@ -26,6 +26,9 @@
       <a href="#account">🔐 帳號安全</a>
       <a href="#server">🌐 伺服器與外網</a>
       <a href="#device">🖥 此裝置</a>
+      <a href="#system">🗂 系統與記錄</a>
+      <a href="#about">⬆ 更新與關於</a>
+      <div class="nav-version hint" id="nav-version" data-no-i18n></div>
     </nav>
 
     <main class="settings-main">
@@ -75,7 +78,28 @@
       <section id="tab-notify" class="tab" hidden>
         <h2>偵測與通知</h2>
         <form id="form-notify" class="form">
-          <label class="check"><input name="enabled" type="checkbox"> 啟用通知（關閉後仍會記錄事件與錄影）</label>
+          <label class="check"><input name="enabled" type="checkbox"> 布防：啟用通知（撤防時仍會記錄事件與錄影）</label>
+          <small class="hint">監控首頁右上角的「🛡 布防 / 撤防」按鈕也可以快速切換。</small>
+          <label class="check"><input name="offline_alert" type="checkbox"> 攝影機離線 / 恢復連線時通知</label>
+
+          <h3>🕒 通知時段</h3>
+          <label class="check"><input name="schedule_enabled" type="checkbox"> 只在指定時段推送通知</label>
+          <div class="row" id="schedule-fields">
+            <label>開始<input name="schedule_start" type="time" required></label>
+            <label>結束<input name="schedule_end" type="time" required></label>
+          </div>
+          <div class="row wrap days" id="schedule-days">
+            <label class="check"><input type="checkbox" data-day="1"> 一</label>
+            <label class="check"><input type="checkbox" data-day="2"> 二</label>
+            <label class="check"><input type="checkbox" data-day="3"> 三</label>
+            <label class="check"><input type="checkbox" data-day="4"> 四</label>
+            <label class="check"><input type="checkbox" data-day="5"> 五</label>
+            <label class="check"><input type="checkbox" data-day="6"> 六</label>
+            <label class="check"><input type="checkbox" data-day="0"> 日</label>
+          </div>
+          <small class="hint">結束時間早於開始時間代表跨夜，例如 22:00–07:00。時段外仍會記錄事件與錄影，只是不推送通知。<span id="schedule-now"></span></small>
+
+          <h3>⚙ 偵測</h3>
           <label>同一台攝影機的最短通知間隔（秒）
             <input name="cooldown_secs" type="number" min="0" max="86400" required>
             <small>避免同一段移動連續通知；0 = 每次都通知</small>
@@ -105,6 +129,7 @@
           <label>主題（留空 = 不推播）<input name="ntfy_topic" maxlength="64" pattern="[A-Za-z0-9_\-]*" placeholder="tapo-我的家-8x2k"></label>
           <label>ntfy 伺服器<input name="ntfy_url" placeholder="https://ntfy.sh"><small>使用自架 ntfy 時才需要修改</small></label>
           <label>存取權杖（選填）<input name="ntfy_token" type="password" autocomplete="off" placeholder="不變更請留空"></label>
+          <label class="check" id="clear-ntfy-wrap" hidden><input name="clear_ntfy_token" type="checkbox"> 移除已儲存的存取權杖</label>
           <label>對外網址（選填）<input name="public_url" placeholder="https://cam.example.com"><small>填入 Cloudflare Tunnel 網址後，點手機推播會直接開啟該攝影機</small></label>
           <div class="row">
             <button type="submit" class="primary">儲存</button>
@@ -136,7 +161,9 @@
           </label>
           <label class="check"><input name="trust_proxy_headers" type="checkbox"> 透過 Cloudflare Tunnel 對外 <span class="tag">需重啟</span></label>
           <small class="hint">開啟後信任 Cloudflare 傳來的真實 IP 與 HTTPS 標頭（登入次數限制、安全 Cookie）。</small>
-          <label>登入有效天數<input name="session_days" type="number" min="1" max="3650" required></label>
+          <label>登入最長有效天數<input name="session_days" type="number" min="1" max="3650" required>
+            <small>關閉瀏覽器、桌面版或重新啟動伺服器後，一律需要重新登入；此為持續開啟時的最長期限。</small>
+          </label>
           <label>WebRTC 連接埠（區網低延遲串流）
             <input name="webrtc_port" type="number" min="1" max="65535" required>
             <small>需在 Windows 防火牆開放此 TCP/UDP 連接埠（僅私人網路）</small>
@@ -144,6 +171,14 @@
           <label>額外 WebRTC 位址（每行一個，選填）
             <textarea name="webrtc_candidates" rows="3" placeholder="192.168.1.10:8555"></textarea>
           </label>
+          <details>
+            <summary>進階：內部連接埠</summary>
+            <div class="row">
+              <label>go2rtc API 連接埠<input name="api_port" type="number" min="1" max="65535" required></label>
+              <label>內部 RTSP 連接埠<input name="rtsp_port" type="number" min="1" max="65535" required></label>
+            </div>
+            <small class="hint">只綁定在本機（127.0.0.1），不需要開放防火牆。與其他程式衝突時才需要修改，儲存後立即套用。</small>
+          </details>
           <button type="submit" class="primary">儲存</button>
         </form>
         <h3>Cloudflare Tunnel 設定步驟</h3>
@@ -154,9 +189,6 @@
           <li>設定轉送到 <code>http://localhost:8080</code>，並勾選上方「透過 Cloudflare Tunnel 對外」</li>
           <li>詳見專案內 <code>docs/cloudflare-tunnel.md</code></li>
         </ol>
-        <h3>系統</h3>
-        <p class="hint">設定資料庫（密碼已加密）：<code id="config-path" data-no-i18n></code></p>
-        <button id="btn-restart">重新啟動伺服器</button>
       </section>
 
       <!-- 此裝置 -->
@@ -185,6 +217,7 @@
               <option value="1">1 欄</option>
               <option value="2">2 欄（4 格）</option>
               <option value="3">3 欄（9 格）</option>
+              <option value="4">4 欄（16 格）</option>
             </select>
           </label>
         </form>
@@ -196,6 +229,65 @@
           <h3>桌面版設定</h3>
           開機自動啟動、桌面通知開關、變更伺服器：請在系統匣圖示按右鍵設定。
         </div>
+      </section>
+
+      <!-- 系統與記錄 -->
+      <section id="tab-system" class="tab" hidden>
+        <h2>系統與記錄</h2>
+        <h3>💾 設定備份與還原</h3>
+        <p class="hint">備份檔包含攝影機、錄影、通知與伺服器設定，<b>不含任何密碼</b>。還原時管理員帳密不變；同代號的攝影機會沿用目前已儲存的密碼。</p>
+        <div class="row wrap">
+          <a class="button" id="btn-backup" href="/api/settings/backup" download>⬇ 下載設定備份</a>
+          <button id="btn-restore">⬆ 從備份還原…</button>
+          <input type="file" id="restore-file" accept=".json,application/json" hidden>
+        </div>
+
+        <h3>🔄 伺服器</h3>
+        <p class="hint">設定資料庫（密碼已加密）：<code id="config-path" data-no-i18n></code></p>
+        <button id="btn-restart">重新啟動伺服器</button>
+
+        <h3>📜 系統記錄</h3>
+        <div class="row wrap">
+          <select id="log-level">
+            <option value="">全部</option>
+            <option value="warn">只看警告與錯誤</option>
+          </select>
+          <button id="btn-log-refresh">↻ 重新整理</button>
+          <label class="check"><input type="checkbox" id="log-auto"> 自動更新</label>
+          <button id="btn-log-copy">📋 複製</button>
+        </div>
+        <pre id="log-view" class="log-view" data-no-i18n></pre>
+      </section>
+
+      <!-- 更新與關於 -->
+      <section id="tab-about" class="tab" hidden>
+        <h2>更新與關於</h2>
+        <div class="about-card">
+          <div class="about-logo">📹</div>
+          <div>
+            <div class="about-name">Tapo NVR</div>
+            <div class="hint"><span>目前版本</span> <b id="about-version" data-no-i18n></b> <span id="about-kind"></span></div>
+          </div>
+        </div>
+
+        <h3>⬆ 軟體更新</h3>
+        <div id="update-status" class="update-status"></div>
+        <pre id="update-notes" class="update-notes" hidden data-no-i18n></pre>
+        <div class="row wrap">
+          <button id="btn-check-update">🔍 檢查更新</button>
+          <button id="btn-install-update" class="primary" hidden>⬇ 立即更新</button>
+          <a class="button" id="btn-download-update" target="_blank" rel="noopener" hidden>⬇ 前往下載</a>
+        </div>
+        <label class="check"><input type="checkbox" id="auto-check"> 自動檢查更新（每 6 小時）</label>
+        <p class="hint" id="update-hint"></p>
+
+        <h3>🔗 連結</h3>
+        <ul class="hint links">
+          <li><a id="link-home" target="_blank" rel="noopener">官方網站</a></li>
+          <li><a id="link-repo" target="_blank" rel="noopener">GitHub 原始碼</a></li>
+          <li><a id="link-releases" target="_blank" rel="noopener">所有版本與更新紀錄</a></li>
+        </ul>
+        <p class="hint">本專案與 TP-Link 無關，Tapo 為 TP-Link 的商標。</p>
       </section>
     </main>
   </div>

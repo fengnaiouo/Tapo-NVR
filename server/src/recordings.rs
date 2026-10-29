@@ -87,14 +87,22 @@ pub async fn segments(
     let root = root(&state)?;
     let (cam, date) = (id.clone(), q.date.clone());
     let segs = tokio::task::spawn_blocking(move || list_day(&root, &cam, &date)).await.unwrap_or_default();
-    let events: Vec<Value> = state
-        .events
-        .recent(1000, Some(&id))
-        .await
-        .into_iter()
-        .filter(|e| e.ts.with_timezone(&Local).format("%Y-%m-%d").to_string() == q.date)
-        .map(|e| json!({"ts": e.ts, "kind": e.kind, "snapshot": e.snapshot}))
-        .collect();
+    // 該日（本地時間）的事件，從資料庫查詢，不受記憶體中筆數限制
+    let day = chrono::NaiveDate::parse_from_str(&q.date, "%Y-%m-%d").map_err(|_| ApiError::bad(tr!("日期格式錯誤", "Invalid date")))?;
+    let local_start = day.and_hms_opt(0, 0, 0).and_then(|t| t.and_local_timezone(Local).earliest());
+    let events: Vec<Value> = match local_start {
+        Some(start) => {
+            let from = start.with_timezone(&chrono::Utc);
+            state
+                .events
+                .events_between(&id, from, from + chrono::Duration::hours(25))
+                .into_iter()
+                .filter(|e| e.ts.with_timezone(&Local).format("%Y-%m-%d").to_string() == q.date)
+                .map(|e| json!({"ts": e.ts, "kind": e.kind, "snapshot": e.snapshot}))
+                .collect()
+        }
+        None => Vec::new(),
+    };
     Ok(Json(json!({"segments": segs, "events": events})).into_response())
 }
 

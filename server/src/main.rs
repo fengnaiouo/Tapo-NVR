@@ -2,21 +2,22 @@ use std::io::Write;
 use std::path::PathBuf;
 
 use anyhow::Result;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 
 fn usage() -> ! {
     eprintln!(
-        "用法 / Usage:\n  tapo-nvr [--data data] [--import config.toml]   啟動伺服器 / start the server\n  tapo-nvr check [--data data]                    測試攝影機 / test cameras\n\n設定存在 data/tapo-nvr.db（機密以 Windows DPAPI 加密）。目前資料夾若有舊版 config.toml 會自動匯入。"
+        "用法 / Usage:\n  tapo-nvr [--data data] [--import config.toml]   啟動伺服器 / start the server\n  tapo-nvr check [--data data]                    測試攝影機 / test cameras\n  tapo-nvr reset-password [--data data]           重設管理員密碼 / reset the admin password\n\n設定存在 data/tapo-nvr.db（機密以 Windows DPAPI 加密）。目前資料夾若有舊版 config.toml 會自動匯入。\n桌面版的資料夾：%APPDATA%\\com.tapo-nvr.desktop\\data"
     );
     std::process::exit(2);
 }
 
 fn main() -> Result<()> {
     tapo_nvr::kill_children_on_exit();
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info,tower_http=warn".into()),
-        )
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info,tower_http=warn".into()))
+        .with(tracing_subscriber::fmt::layer())
+        .with(tapo_nvr::log_layer())
         .init();
 
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -34,7 +35,7 @@ fn main() -> Result<()> {
                 i += 1;
                 legacy = args.get(i).map(PathBuf::from).unwrap_or_else(|| usage());
             }
-            "hash-password" => command = "hash-password",
+            "reset-password" | "hash-password" => command = "reset-password",
             "check" => command = "check",
             "run" => command = "run",
             _ => usage(),
@@ -44,8 +45,8 @@ fn main() -> Result<()> {
 
     let rt = tokio::runtime::Runtime::new()?;
     let code = match command {
-        "hash-password" => {
-            hash_password_cmd()?;
+        "reset-password" => {
+            reset_password_cmd(&data_dir)?;
             0
         }
         "check" => {
@@ -77,7 +78,8 @@ fn main() -> Result<()> {
     std::process::exit(code);
 }
 
-fn hash_password_cmd() -> Result<()> {
+/// 忘記密碼時使用：直接把新的管理員密碼寫入資料庫（伺服器需先關閉）
+fn reset_password_cmd(data_dir: &std::path::Path) -> Result<()> {
     let read = |prompt: &str| -> Result<String> {
         print!("{prompt}");
         std::io::stdout().flush()?;
@@ -85,14 +87,24 @@ fn hash_password_cmd() -> Result<()> {
         std::io::stdin().read_line(&mut s)?;
         Ok(s.trim_end_matches(['\r', '\n']).to_string())
     };
-    let a = read("輸入新密碼：")?;
-    let b = read("再輸入一次：")?;
+    let cfg = tapo_nvr::read_config(data_dir)?;
+    println!("資料庫 / Database: {}", data_dir.join(tapo_nvr::store::DB_FILE).display());
+    let user = read(&format!("管理員帳號 / Username [{}]: ", cfg.auth.username))?;
+    let a = read("新密碼 / New password: ")?;
+    let b = read("再輸入一次 / Repeat: ")?;
     if a != b {
-        anyhow::bail!("兩次輸入不一致");
+        anyhow::bail!("兩次輸入不一致 / Passwords do not match");
     }
     if a.chars().count() < 8 {
-        anyhow::bail!("密碼至少 8 個字元");
+        anyhow::bail!("密碼至少 8 個字元 / At least 8 characters");
     }
-    println!("\n請貼到 config.toml 的 [auth] password_hash：\n{}", tapo_nvr::hash_password(&a)?);
+    let hash = tapo_nvr::hash_password(&a)?;
+    tapo_nvr::modify_config(data_dir, |c| {
+        if !user.trim().is_empty() {
+            c.auth.username = user.trim().to_string();
+        }
+        c.auth.password_hash = hash;
+    })?;
+    println!("已重設管理員密碼 / Admin password has been reset.");
     Ok(())
 }

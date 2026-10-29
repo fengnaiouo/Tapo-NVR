@@ -17,6 +17,8 @@ pub fn kind_label(kind: &str) -> String {
         "motion" => tr!("移動偵測", "Motion detected"),
         "person" => tr!("偵測到人形", "Person detected"),
         "tamper" => tr!("鏡頭遭遮蔽", "Camera tampering"),
+        "offline" => tr!("攝影機離線", "Camera offline"),
+        "online" => tr!("攝影機恢復連線", "Camera back online"),
         other => other.to_string(),
     }
 }

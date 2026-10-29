@@ -2,12 +2,15 @@
 
 #[macro_use]
 pub mod i18n;
+pub mod about;
 mod api;
 pub mod auth;
 pub mod config;
 mod discovery;
 mod events;
 mod go2rtc;
+mod health;
+pub mod logbuf;
 mod notify;
 mod onvif;
 mod recorder;
@@ -40,6 +43,7 @@ use config::{CameraConfig, Config, ServerConfig};
 pub const EXIT_RESTART: i32 = 3;
 
 pub use auth::hash_password;
+pub use logbuf::layer as log_layer;
 
 #[derive(Clone)]
 pub struct AppState(Arc<Inner>);
@@ -237,6 +241,7 @@ impl Server {
         let data_dir = std::path::absolute(&opts.data_dir)?;
         let store = Arc::new(store::Store::open(&data_dir)?);
         store::migrate_legacy(&store, opts.legacy_config.as_deref(), &data_dir)?;
+        store.clear_sessions()?;
         let cfg = match store.load_config()? {
             Some(c) => c,
             None => {
@@ -309,6 +314,8 @@ impl Server {
         state.sync_watchers().await;
         recorder::sync(&state).await;
         tokio::spawn(recorder::retention_loop(state.clone()));
+        tokio::spawn(health::monitor(state.clone()));
+        tokio::spawn(about::update_loop(state.clone()));
 
         let app = router(state.clone(), web_dir);
         let cfg = state.cfg();
@@ -421,6 +428,13 @@ fn router(state: AppState, web_dir: Option<PathBuf>) -> Router {
             put(settings::update_camera).delete(settings::delete_camera),
         )
         .route("/api/system/restart", post(settings::restart))
+        .route("/api/system/logs", get(about::logs))
+        .route("/api/about", get(about::about))
+        .route("/api/about/check", post(about::check))
+        .route("/api/settings/update", put(settings::put_update))
+        .route("/api/settings/backup", get(about::backup))
+        .route("/api/settings/restore", post(about::restore))
+        .route("/api/notify/armed", put(settings::put_armed))
         .route("/go2rtc/api/ws", get(go2rtc::ws_proxy))
         .route("/go2rtc/{file}", get(go2rtc::player_js))
         .layer(middleware::from_fn_with_state(state.clone(), auth::require_auth));

@@ -16,6 +16,8 @@ pub struct Config {
     #[serde(default)]
     pub recording: RecordingConfig,
     #[serde(default)]
+    pub update: UpdateConfig,
+    #[serde(default)]
     pub cameras: Vec<CameraConfig>,
 }
 
@@ -105,6 +107,57 @@ pub struct NotifyConfig {
     pub public_url: String,
     /// 推播與背景訊息的語言：auto（系統語言）/ zh-TW / zh-CN / en
     pub language: String,
+    /// 通知時段（布防排程）：啟用後只在指定星期與時間內推送通知；事件與錄影不受影響
+    pub schedule_enabled: bool,
+    /// "HH:MM"，結束早於開始代表跨夜（例如 22:00–07:00）
+    pub schedule_start: String,
+    pub schedule_end: String,
+    /// 0 = 星期日 … 6 = 星期六
+    pub schedule_days: Vec<u8>,
+    /// 攝影機離線 / 恢復連線時通知
+    pub offline_alert: bool,
+}
+
+impl NotifyConfig {
+    /// 現在是否在通知時段內
+    pub fn in_schedule(&self, now: chrono::DateTime<chrono::Local>) -> bool {
+        use chrono::{Datelike, Timelike};
+        if !self.schedule_enabled {
+            return true;
+        }
+        let parse = |s: &str| -> Option<u32> {
+            let (h, m) = s.trim().split_once(':')?;
+            let (h, m) = (h.parse::<u32>().ok()?, m.parse::<u32>().ok()?);
+            (h < 24 && m < 60).then_some(h * 60 + m)
+        };
+        let (Some(start), Some(end)) = (parse(&self.schedule_start), parse(&self.schedule_end)) else { return true };
+        let minute = now.hour() * 60 + now.minute();
+        let today = now.weekday().num_days_from_sunday() as u8;
+        let yesterday = (today + 6) % 7;
+        if start == end {
+            return self.schedule_days.contains(&today);
+        }
+        if start < end {
+            self.schedule_days.contains(&today) && minute >= start && minute < end
+        } else {
+            // 跨夜：開始那天的晚上，或隔天清晨（以開始那天為準）
+            (minute >= start && self.schedule_days.contains(&today))
+                || (minute < end && self.schedule_days.contains(&yesterday))
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UpdateConfig {
+    /// 定期檢查 GitHub 上是否有新版本
+    pub auto_check: bool,
+}
+
+impl Default for UpdateConfig {
+    fn default() -> Self {
+        Self { auto_check: true }
+    }
 }
 
 impl Default for NotifyConfig {
@@ -119,6 +172,11 @@ impl Default for NotifyConfig {
             ntfy_token: String::new(),
             public_url: String::new(),
             language: "auto".into(),
+            schedule_enabled: false,
+            schedule_start: "22:00".into(),
+            schedule_end: "07:00".into(),
+            schedule_days: vec![0, 1, 2, 3, 4, 5, 6],
+            offline_alert: true,
         }
     }
 }
@@ -297,8 +355,26 @@ impl Config {
         if self.server.listen.parse::<std::net::SocketAddr>().is_err() {
             bail!("{}", tr!("監聽位址格式錯誤，例如 0.0.0.0:8080", "Invalid listen address, e.g. 0.0.0.0:8080"));
         }
-        if self.go2rtc.api_port == 0 || self.go2rtc.webrtc_port == 0 {
+        let ports = [self.go2rtc.api_port, self.go2rtc.rtsp_port, self.go2rtc.webrtc_port];
+        if ports.contains(&0) {
             bail!("{}", tr!("go2rtc 連接埠不可為 0", "go2rtc ports cannot be 0"));
+        }
+        let listen_port = self.server.listen.parse::<std::net::SocketAddr>().map(|a| a.port()).unwrap_or(0);
+        if ports[0] == ports[1] || ports[0] == ports[2] || ports[1] == ports[2] || ports.contains(&listen_port) {
+            bail!("{}", tr!("網頁、go2rtc API、RTSP、WebRTC 連接埠不可重複", "Web, go2rtc API, RTSP and WebRTC ports must all be different"));
+        }
+        if self.notify.schedule_enabled {
+            let ok = |s: &str| {
+                s.split_once(':').is_some_and(|(h, m)| {
+                    h.parse::<u32>().is_ok_and(|h| h < 24) && m.len() == 2 && m.parse::<u32>().is_ok_and(|m| m < 60)
+                })
+            };
+            if !ok(&self.notify.schedule_start) || !ok(&self.notify.schedule_end) {
+                bail!("{}", tr!("通知時段格式錯誤，例如 22:00", "Invalid notification schedule time, e.g. 22:00"));
+            }
+            if self.notify.schedule_days.is_empty() || self.notify.schedule_days.iter().any(|d| *d > 6) {
+                bail!("{}", tr!("通知時段至少要選一天", "Select at least one day for the notification schedule"));
+            }
         }
         if self.notify.max_events < 10 {
             bail!("{}", tr!("事件保留數量至少 10", "Keep at least 10 events"));
@@ -348,5 +424,36 @@ impl Config {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::TimeZone;
+
+    use super::NotifyConfig;
+
+    fn at(y: i32, mo: u32, d: u32, h: u32, mi: u32) -> chrono::DateTime<chrono::Local> {
+        chrono::Local.with_ymd_and_hms(y, mo, d, h, mi, 0).unwrap()
+    }
+
+    #[test]
+    fn schedule() {
+        // 2026-11-02 is a Monday
+        let mut n = NotifyConfig { schedule_enabled: true, ..Default::default() };
+        n.schedule_start = "22:00".into();
+        n.schedule_end = "07:00".into();
+        n.schedule_days = vec![1]; // Monday only
+        assert!(n.in_schedule(at(2026, 11, 2, 23, 0))); // Mon night
+        assert!(n.in_schedule(at(2026, 11, 3, 6, 59))); // Tue early morning belongs to Monday
+        assert!(!n.in_schedule(at(2026, 11, 3, 7, 0)));
+        assert!(!n.in_schedule(at(2026, 11, 2, 6, 0))); // Mon early morning belongs to Sunday
+        assert!(!n.in_schedule(at(2026, 11, 3, 23, 0))); // Tue night
+        n.schedule_start = "09:00".into();
+        n.schedule_end = "18:00".into();
+        assert!(n.in_schedule(at(2026, 11, 2, 12, 0)));
+        assert!(!n.in_schedule(at(2026, 11, 2, 18, 0)));
+        n.schedule_enabled = false;
+        assert!(n.in_schedule(at(2026, 11, 3, 3, 0)));
     }
 }

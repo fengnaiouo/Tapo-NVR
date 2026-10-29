@@ -27,6 +27,11 @@ pub struct Store {
     pub path: PathBuf,
 }
 
+/// 資料庫中的時間一律存成固定格式的 UTC 字串，字串比較即等於時間比較
+fn ts(t: DateTime<Utc>) -> String {
+    t.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+}
+
 pub fn token_hash(token: &str) -> String {
     Sha256::digest(token.as_bytes()).iter().map(|b| format!("{b:02x}")).collect()
 }
@@ -50,6 +55,10 @@ impl Store {
                  ts TEXT NOT NULL, camera TEXT NOT NULL, camera_name TEXT NOT NULL,
                  kind TEXT NOT NULL, snapshot TEXT, notify INTEGER NOT NULL DEFAULT 1);
              CREATE INDEX IF NOT EXISTS events_camera_ts ON events (camera, ts);
+             CREATE TABLE IF NOT EXISTS motion (
+                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                 camera TEXT NOT NULL, start TEXT NOT NULL, end TEXT);
+             CREATE INDEX IF NOT EXISTS motion_camera_start ON motion (camera, start);
              INSERT OR IGNORE INTO meta (key, value) VALUES ('schema', '1');",
         )?;
         Ok(Self { conn: Mutex::new(conn), dir: dir.to_path_buf(), path })
@@ -83,6 +92,7 @@ impl Store {
             go2rtc: parse(section("go2rtc")?),
             notify: parse(section("notify")?),
             recording: parse(section("recording")?),
+            update: parse(section("update")?),
             cameras: Vec::new(),
         };
         let mut stmt = conn.prepare("SELECT data FROM cameras ORDER BY position, id")?;
@@ -134,6 +144,7 @@ impl Store {
             ("go2rtc", serde_json::to_string(&cfg.go2rtc)?),
             ("notify", serde_json::to_string(&notify)?),
             ("recording", serde_json::to_string(&cfg.recording)?),
+            ("update", serde_json::to_string(&cfg.update)?),
         ] {
             tx.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?1, ?2)", params![key, value])?;
         }
@@ -176,6 +187,12 @@ impl Store {
         Ok(())
     }
 
+    /// 伺服器啟動時呼叫：應用程式或伺服器完全關閉後重開，所有人都必須重新登入
+    pub fn clear_sessions(&self) -> Result<()> {
+        self.conn().execute("DELETE FROM sessions", [])?;
+        Ok(())
+    }
+
     pub fn delete_session(&self, token: &str) -> Result<()> {
         self.conn().execute("DELETE FROM sessions WHERE token_hash = ?1", [token_hash(token)])?;
         Ok(())
@@ -198,7 +215,7 @@ impl Store {
         let conn = self.conn();
         conn.execute(
             "INSERT INTO events (ts, camera, camera_name, kind, snapshot, notify) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![ev.ts.to_rfc3339(), ev.camera, ev.camera_name, ev.kind, ev.snapshot, ev.notify],
+            params![ts(ev.ts), ev.camera, ev.camera_name, ev.kind, ev.snapshot, ev.notify],
         )?;
         Ok(conn.last_insert_rowid() as u64)
     }
@@ -228,6 +245,92 @@ impl Store {
             .collect();
         out.reverse();
         Ok(out)
+    }
+
+    /// 某台攝影機在時間範圍內的事件（由舊到新）
+    pub fn events_between(&self, camera: &str, from: DateTime<Utc>, to: DateTime<Utc>) -> Result<Vec<Event>> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
+            "SELECT id, ts, camera, camera_name, kind, snapshot, notify FROM events
+             WHERE camera = ?1 AND ts >= ?2 AND ts <= ?3 ORDER BY ts",
+        )?;
+        let rows = stmt.query_map(params![camera, ts(from), ts(to)], |r| {
+            Ok(Event {
+                id: r.get::<_, i64>(0)? as u64,
+                ts: r.get::<_, String>(1)?.parse::<DateTime<Utc>>().unwrap_or_else(|_| Utc::now()),
+                camera: r.get(2)?,
+                camera_name: r.get(3)?,
+                kind: r.get(4)?,
+                snapshot: r.get(5)?,
+                notify: r.get(6)?,
+            })
+        })?;
+        Ok(rows.filter_map(|e| e.ok()).collect())
+    }
+
+    /// 最後一筆離線 / 恢復連線事件（重新啟動後沿用，避免重複通知仍在離線的攝影機）
+    pub fn last_reach_event(&self, camera: &str) -> Result<Option<String>> {
+        Ok(self
+            .conn()
+            .query_row(
+                "SELECT kind FROM events WHERE camera = ?1 AND kind IN ('offline', 'online') ORDER BY id DESC LIMIT 1",
+                [camera],
+                |r| r.get(0),
+            )
+            .optional()?)
+    }
+
+    // ------------------------------------------------------------------
+    // 移動區間（事件錄影據此決定保留哪些片段；存在資料庫，重新啟動後仍有效）
+
+    pub fn motion_start(&self, camera: &str, at: DateTime<Utc>) -> Result<()> {
+        let conn = self.conn();
+        let open: Option<i64> = conn
+            .query_row("SELECT id FROM motion WHERE camera = ?1 AND end IS NULL", [camera], |r| r.get(0))
+            .optional()?;
+        if open.is_none() {
+            conn.execute("INSERT INTO motion (camera, start) VALUES (?1, ?2)", params![camera, ts(at)])?;
+        }
+        Ok(())
+    }
+
+    pub fn motion_end(&self, camera: &str, at: DateTime<Utc>) -> Result<()> {
+        self.conn()
+            .execute("UPDATE motion SET end = ?2 WHERE camera = ?1 AND end IS NULL", params![camera, ts(at)])?;
+        Ok(())
+    }
+
+    /// 與時間範圍重疊的移動區間；尚未結束的以 now 為結束時間
+    pub fn motion_between(
+        &self,
+        camera: &str,
+        from: DateTime<Utc>,
+        to: DateTime<Utc>,
+    ) -> Result<Vec<(DateTime<Utc>, DateTime<Utc>)>> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
+            "SELECT start, end FROM motion WHERE camera = ?1 AND start <= ?3 AND (end IS NULL OR end >= ?2)",
+        )?;
+        let now = Utc::now();
+        let rows = stmt.query_map(params![camera, ts(from), ts(to)], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?))
+        })?;
+        Ok(rows
+            .filter_map(|r| r.ok())
+            .filter_map(|(s, e)| {
+                let s = s.parse::<DateTime<Utc>>().ok()?;
+                let e = e.and_then(|e| e.parse::<DateTime<Utc>>().ok()).unwrap_or(now);
+                Some((s, e))
+            })
+            .collect())
+    }
+
+    /// 啟動時：上次未正常結束的區間以開始時間收尾；刪除 7 天前的區間
+    pub fn motion_housekeeping(&self) -> Result<()> {
+        let conn = self.conn();
+        conn.execute("UPDATE motion SET end = start WHERE end IS NULL", [])?;
+        conn.execute("DELETE FROM motion WHERE start < ?1", [ts(Utc::now() - chrono::Duration::days(7))])?;
+        Ok(())
     }
 
     /// 只保留最新 max 筆，回傳被刪除事件的截圖檔名

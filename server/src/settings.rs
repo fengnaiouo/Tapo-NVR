@@ -1,4 +1,4 @@
-//! 設定 API：所有設定都可從網頁 / 桌面版修改，寫回 config.toml 並立即套用。
+//! 設定 API：所有設定都可從網頁 / 桌面版修改，寫入 SQLite 資料庫並立即套用。
 
 use std::time::Duration;
 
@@ -79,7 +79,14 @@ pub async fn get_settings(State(state): State<AppState>) -> Json<Value> {
             "has_ntfy_token": !n.ntfy_token.is_empty(),
             "public_url": n.public_url,
             "language": n.language,
+            "schedule_enabled": n.schedule_enabled,
+            "schedule_start": n.schedule_start,
+            "schedule_end": n.schedule_end,
+            "schedule_days": n.schedule_days,
+            "offline_alert": n.offline_alert,
+            "in_schedule": n.in_schedule(chrono::Local::now()),
         },
+        "update": c.update,
         "recording": c.recording,
         "ffmpeg": state.ffmpeg_bin.display().to_string(),
         "desktop_embedded": state.desktop_embedded,
@@ -89,6 +96,8 @@ pub async fn get_settings(State(state): State<AppState>) -> Json<Value> {
             "trust_proxy_headers": c.server.trust_proxy_headers,
             "webrtc_port": c.go2rtc.webrtc_port,
             "webrtc_candidates": c.go2rtc.webrtc_candidates,
+            "api_port": c.go2rtc.api_port,
+            "rtsp_port": c.go2rtc.rtsp_port,
         },
         "restart_required": state.restart_required(),
         "can_restart": state.can_restart,
@@ -115,6 +124,16 @@ pub struct NotifyReq {
     public_url: String,
     #[serde(default)]
     language: Option<String>,
+    #[serde(default)]
+    schedule_enabled: bool,
+    #[serde(default)]
+    schedule_start: Option<String>,
+    #[serde(default)]
+    schedule_end: Option<String>,
+    #[serde(default)]
+    schedule_days: Option<Vec<u8>>,
+    #[serde(default)]
+    offline_alert: Option<bool>,
 }
 
 pub async fn put_notify(State(state): State<AppState>, Json(r): Json<NotifyReq>) -> ApiResult {
@@ -144,6 +163,22 @@ pub async fn put_notify(State(state): State<AppState>, Json(r): Json<NotifyReq>)
                     _ => "auto".into(),
                 };
             }
+            c.notify.schedule_enabled = r.schedule_enabled;
+            if let Some(s) = &r.schedule_start {
+                c.notify.schedule_start = s.trim().to_string();
+            }
+            if let Some(s) = &r.schedule_end {
+                c.notify.schedule_end = s.trim().to_string();
+            }
+            if let Some(d) = &r.schedule_days {
+                let mut d = d.clone();
+                d.sort_unstable();
+                d.dedup();
+                c.notify.schedule_days = d;
+            }
+            if let Some(v) = r.offline_alert {
+                c.notify.offline_alert = v;
+            }
             Ok(())
         })
         .await
@@ -159,6 +194,44 @@ pub struct ServerReq {
     #[serde(default)]
     webrtc_candidates: Vec<String>,
     session_days: i64,
+    #[serde(default)]
+    api_port: Option<u16>,
+    #[serde(default)]
+    rtsp_port: Option<u16>,
+}
+
+#[derive(Deserialize)]
+pub struct ArmReq {
+    armed: bool,
+}
+
+/// 首頁的布防 / 撤防開關（通知總開關）
+pub async fn put_armed(State(state): State<AppState>, Json(r): Json<ArmReq>) -> ApiResult {
+    state
+        .update_config(|c| {
+            c.notify.enabled = r.armed;
+            Ok(())
+        })
+        .await
+        .map_err(bad)?;
+    tracing::info!("{}", if r.armed { "已布防（開啟通知）" } else { "已撤防（暫停通知）" });
+    ok()
+}
+
+#[derive(Deserialize)]
+pub struct UpdateReq {
+    auto_check: bool,
+}
+
+pub async fn put_update(State(state): State<AppState>, Json(r): Json<UpdateReq>) -> ApiResult {
+    state
+        .update_config(|c| {
+            c.update.auto_check = r.auto_check;
+            Ok(())
+        })
+        .await
+        .map_err(bad)?;
+    ok()
 }
 
 pub async fn put_server(State(state): State<AppState>, Json(r): Json<ServerReq>) -> ApiResult {
@@ -174,6 +247,12 @@ pub async fn put_server(State(state): State<AppState>, Json(r): Json<ServerReq>)
                 .filter(|s| !s.is_empty())
                 .collect();
             c.auth.session_days = r.session_days;
+            if let Some(p) = r.api_port {
+                c.go2rtc.api_port = p;
+            }
+            if let Some(p) = r.rtsp_port {
+                c.go2rtc.rtsp_port = p;
+            }
             Ok(())
         })
         .await

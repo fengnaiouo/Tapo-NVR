@@ -17,8 +17,39 @@ use tokio_tungstenite::tungstenite::Message as TMsg;
 use crate::config::Config;
 use crate::AppState;
 
+/// 把設定中的機密（串流網址內的攝影機密碼、本機 API / RTSP 帳密）換成 ${TNVR_n} 佔位符。
+/// 佔位符版本寫入 data/go2rtc.json（不含任何密碼），真正的值透過環境變數傳給 go2rtc；
+/// go2rtc 讀取設定檔時會代換 ${VAR}。不放在指令列，因為其他程式可以看到行程的指令列。
+fn split_secrets(config: &str) -> (String, Vec<(String, String)>) {
+    let mut v: serde_json::Value = serde_json::from_str(config).unwrap_or_default();
+    let mut env = Vec::new();
+    let mut hide = |s: &mut serde_json::Value| {
+        if let Some(text) = s.as_str() {
+            let name = format!("TNVR_{}", env.len());
+            // 代換發生在 JSON 解析之前，所以環境變數的值要先做 JSON 字串跳脫
+            let escaped = serde_json::to_string(text).unwrap_or_default();
+            env.push((name.clone(), escaped[1..escaped.len() - 1].to_string()));
+            *s = serde_json::Value::String(format!("${{{name}}}"));
+        }
+    };
+    for section in ["api", "rtsp"] {
+        for key in ["username", "password"] {
+            if let Some(s) = v.get_mut(section).and_then(|x| x.get_mut(key)) {
+                hide(s);
+            }
+        }
+    }
+    if let Some(streams) = v.get_mut("streams").and_then(|s| s.as_object_mut()) {
+        for sources in streams.values_mut() {
+            if let Some(arr) = sources.as_array_mut() {
+                arr.iter_mut().for_each(&mut hide);
+            }
+        }
+    }
+    (serde_json::to_string_pretty(&v).unwrap_or_default(), env)
+}
+
 /// 計算 go2rtc 設定（JSON）並與目前的比較；回傳 true 代表有變更（需要重啟 go2rtc）
-/// 設定內含攝影機密碼，不寫入磁碟，啟動時以參數直接傳給 go2rtc
 pub fn write_config_if_changed(state: &AppState, cfg: &Config) -> Result<bool> {
     let text = render_config(state, cfg).to_string();
     let mut cur = state.go2rtc_config.lock().unwrap();
@@ -89,10 +120,15 @@ pub async fn supervise(state: AppState) {
             return;
         }
         let config = state.go2rtc_config.lock().unwrap().clone();
+        let (public, env) = split_secrets(&config);
+        let path = state.data_dir.join("go2rtc.json");
+        if let Err(e) = std::fs::write(&path, public) {
+            tracing::error!("無法寫入 {}：{e}", path.display());
+        }
         let mut cmd = tokio::process::Command::new(&binary);
-        // 以 { 開頭的參數會被 go2rtc 當成設定內容，而不是檔案路徑
         cmd.arg("-config")
-            .arg(&config)
+            .arg(&path)
+            .envs(env)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .kill_on_drop(true);
@@ -273,4 +309,24 @@ async fn pump(client: WebSocket, upstream: &str, auth: &str) -> Result<()> {
         _ = down => {},
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn secrets_are_moved_to_env() {
+        let cfg = r#"{"api":{"username":"u1","password":"p1"},"rtsp":{"username":"u1","password":"p1"},
+            "streams":{"a_main":["rtsp://cam:p@ss \"x\"@1.2.3.4/stream1"]},"log":{"level":"info"}}"#;
+        let (public, env) = super::split_secrets(cfg);
+        assert!(!public.contains("p1") && !public.contains("p@ss"));
+        assert!(public.contains("${TNVR_0}"));
+        // 代換回去後必須仍是合法 JSON，且值與原本相同
+        let mut restored = public.clone();
+        for (k, v) in &env {
+            restored = restored.replace(&format!("${{{k}}}"), v);
+        }
+        let v: serde_json::Value = serde_json::from_str(&restored).unwrap();
+        assert_eq!(v["streams"]["a_main"][0], "rtsp://cam:p@ss \"x\"@1.2.3.4/stream1");
+        assert_eq!(v["api"]["password"], "p1");
+    }
 }

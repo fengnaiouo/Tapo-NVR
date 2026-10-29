@@ -1,5 +1,5 @@
 const $ = (s) => document.querySelector(s);
-const KIND_KEYS = {motion: '移動偵測', person: '偵測到人形', tamper: '鏡頭遭遮蔽'};
+const KIND_KEYS = {motion: '移動偵測', person: '偵測到人形', tamper: '鏡頭遭遮蔽', offline: '攝影機離線', online: '攝影機恢復連線'};
 const kindLabel = (k) => t(KIND_KEYS[k] || k);
 const HOUR = 3600e3;
 const DAY = 24 * HOUR;

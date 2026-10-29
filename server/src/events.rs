@@ -36,20 +36,21 @@ fn default_true() -> bool {
     true
 }
 
-type Intervals = HashMap<String, VecDeque<(DateTime<Utc>, Option<DateTime<Utc>>)>>;
-
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct CameraStatus {
+    /// ONVIF 事件訂閱是否正常（只有開啟移動偵測的攝影機才有）
     pub online: Option<bool>,
     pub active: Vec<String>,
     pub error: Option<String>,
+    /// 攝影機是否連得到（每台都有，由連線監控定期檢查）
+    pub reachable: Option<bool>,
+    pub reach_error: Option<String>,
 }
 
 pub struct EventHub {
     pub tx: broadcast::Sender<String>,
     recent: Mutex<VecDeque<Event>>,
     status: Mutex<HashMap<String, CameraStatus>>,
-    intervals: Mutex<Intervals>,
     store: Arc<crate::store::Store>,
     pub snapshot_dir: PathBuf,
     max_events: AtomicUsize,
@@ -60,13 +61,13 @@ impl EventHub {
     pub fn load(store: Arc<crate::store::Store>, data_dir: &std::path::Path, max_events: usize) -> Self {
         let snapshot_dir = data_dir.join("snapshots");
         let _ = std::fs::create_dir_all(&snapshot_dir);
+        let _ = store.motion_housekeeping();
         let recent: VecDeque<Event> = store.recent_events(max_events).unwrap_or_default().into();
         let (tx, _) = broadcast::channel(256);
         Self {
             tx,
             recent: Mutex::new(recent),
             status: Mutex::new(HashMap::new()),
-            intervals: Mutex::new(HashMap::new()),
             store,
             snapshot_dir,
             max_events: AtomicUsize::new(max_events),
@@ -81,34 +82,52 @@ impl EventHub {
         let _ = self.tx.send(msg.to_string());
     }
 
-    /// 記錄移動開始 / 結束（事件錄影依此決定保留哪些片段，保留 24 小時）
+    /// 記錄移動開始 / 結束（事件錄影依此決定保留哪些片段；存在資料庫，重新啟動後仍有效）
     pub async fn mark_motion(&self, camera: &str, active: bool) {
         let now = Utc::now();
-        let mut map = self.intervals.lock().await;
-        let q = map.entry(camera.to_string()).or_default();
-        if active {
-            if q.back().is_none_or(|(_, end)| end.is_some()) {
-                q.push_back((now, None));
-            }
-        } else if let Some(last) = q.back_mut() {
-            if last.1.is_none() {
-                last.1 = Some(now);
-            }
-        }
-        let cutoff = now - chrono::Duration::hours(24);
-        while q.front().is_some_and(|(_, end)| end.is_some_and(|e| e < cutoff)) {
-            q.pop_front();
+        let r = if active { self.store.motion_start(camera, now) } else { self.store.motion_end(camera, now) };
+        if let Err(e) = r {
+            tracing::error!("無法寫入移動區間：{e}");
         }
     }
 
-    pub async fn motion_intervals(&self, camera: &str) -> Vec<(DateTime<Utc>, DateTime<Utc>)> {
-        let now = Utc::now();
-        self.intervals
-            .lock()
-            .await
-            .get(camera)
-            .map(|q| q.iter().map(|(s, e)| (*s, e.unwrap_or(now))).collect())
-            .unwrap_or_default()
+    /// 時間範圍內需保留的區間：移動區間 + 單點事件
+    pub fn keep_ranges(&self, camera: &str, from: DateTime<Utc>, to: DateTime<Utc>) -> Vec<(DateTime<Utc>, DateTime<Utc>)> {
+        let mut ranges = self.store.motion_between(camera, from, to).unwrap_or_default();
+        ranges.extend(
+            self.store
+                .events_between(camera, from, to)
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|e| matches!(e.kind.as_str(), "motion" | "person" | "tamper"))
+                .map(|e| (e.ts, e.ts)),
+        );
+        ranges
+    }
+
+    pub fn events_between(&self, camera: &str, from: DateTime<Utc>, to: DateTime<Utc>) -> Vec<Event> {
+        self.store.events_between(camera, from, to).unwrap_or_default()
+    }
+
+    /// 攝影機連線狀態（離線偵測用）
+    pub async fn set_reachable(&self, camera: &str, reachable: bool, error: Option<String>) {
+        self.update_status(camera, |s| {
+            s.reachable = Some(reachable);
+            s.reach_error = error;
+        })
+        .await;
+    }
+
+    /// 上次已通知的連線狀態：Some(false) = 最後一筆是離線事件
+    pub fn last_reach_state(&self, camera: &str) -> Option<bool> {
+        match self.store.last_reach_event(camera).ok().flatten()?.as_str() {
+            "offline" => Some(false),
+            _ => None,
+        }
+    }
+
+    pub async fn record_event(&self, ev: Event) -> Event {
+        self.record(ev).await
     }
 
     /// 移除已刪除攝影機的狀態
@@ -144,7 +163,7 @@ impl EventHub {
             .send(json!({"type": "status", "camera": camera, "status": snapshot}).to_string());
     }
 
-    async fn record(&self, mut ev: Event) {
+    async fn record(&self, mut ev: Event) -> Event {
         match self.store.insert_event(&ev) {
             Ok(id) => ev.id = id,
             Err(e) => tracing::error!("無法寫入事件：{e}"),
@@ -162,6 +181,7 @@ impl EventHub {
             let _ = tokio::fs::remove_file(self.snapshot_dir.join(f)).await;
         }
         let _ = self.tx.send(json!({"type": "event", "event": ev}).to_string());
+        ev
     }
 }
 
@@ -308,7 +328,8 @@ async fn on_trigger(state: AppState, cam: CameraConfig, kind: &'static str) {
             Err(e) => tracing::warn!("[{}] 截圖失敗：{e}", cam.id),
         }
     }
-    let notify = cfg.notify.enabled && cam.notify;
+    // 布防：總開關、該攝影機的通知設定、通知時段都符合才推送；事件本身一律記錄
+    let notify = cfg.notify.enabled && cam.notify && cfg.notify.in_schedule(chrono::Local::now());
     tracing::info!("[{}] 偵測到 {kind}", cam.id);
     let event = Event {
         id: 0,

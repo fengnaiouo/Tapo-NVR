@@ -15,13 +15,13 @@ A free, open-source monitoring and recording system for TP-Link Tapo cameras, wr
 | Camera controls | Privacy mode, night vision, motion detection & sensitivity, person detection, auto-tracking, SD card status |
 | Recording | Per camera: **continuous** or **motion-only** (with pre/post roll); retention by days and size; automatic cleanup when disk space is low |
 | Playback | 24-hour timeline (zoomable to 15 minutes), event markers, 0.5–16× speed, snapshots, **MP4 export** |
-| Alerts | Motion detection, snapshots, event log; Windows native, browser and **phone push** (ntfy) notifications |
+| Alerts | Motion detection, snapshots, event log; Windows native, browser and **phone push** (ntfy) notifications; one-click **arm / disarm**, **notification schedule** (e.g. nights only), **camera offline / back online** alerts |
 | Two-way audio | Talk to the camera from your PC (requires the TP-Link account password) |
 | Camera support | LAN discovery (ONVIF + TP-Link TDP); C1xx / C2xx / C3xx / C5xx and other Tapo models; models without RTSP use the Tapo private stream; legacy and new (TPAP) login protocols |
 | Remote access | Direct on the LAN, or from anywhere through Cloudflare Tunnel |
-| Settings | **Everything is configured in the app or web UI (⚙ Settings)**; most changes apply immediately |
+| Settings | **Everything is configured in the app or web UI (⚙ Settings)**; most changes apply immediately; settings backup / restore (without passwords); built-in system log viewer; version and update status in Settings → Updates & about |
 | Desktop app | Tray icon, start with Windows, keeps recording in the background, in-app auto-update |
-| Security | Settings in SQLite with **camera passwords encrypted by Windows DPAPI**; sessions stored as hashes only; Argon2, login rate limiting, CSRF protection; camera passwords never reach the browser |
+| Security | Settings in SQLite with **camera passwords encrypted by Windows DPAPI**; passwords never appear in config files or process command lines; sessions stored as hashes only and **sign-in is required again after closing the browser / app or restarting**; Argon2, login rate limiting, CSRF protection; camera passwords never reach the browser |
 
 ## Getting started
 
@@ -52,6 +52,8 @@ A free, open-source monitoring and recording system for TP-Link Tapo cameras, wr
 ```
 
 Settings are stored in `data\tapo-nvr.db`; a legacy `config.toml` in the working folder is imported automatically.
+
+**Forgot the admin password?** Desktop app: tray icon → **App preferences** → **Forgot the admin password?**. Standalone server: stop it, then run `tapo-nvr reset-password --data data`.
 
 ### Viewing from other devices
 

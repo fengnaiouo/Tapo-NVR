@@ -444,3 +444,32 @@ a.button.primary { background: var(--accent); border-color: var(--accent); }
 .pill { font-size: 12px; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--border); }
 .pill.ok { color: #86efac; border-color: #166534; background: rgba(22, 101, 52, .25); }
 .pill.warn { color: #fde68a; border-color: #92400e; background: rgba(146, 64, 14, .25); }
+/* ---- 設定：系統與記錄、更新與關於、通知時段 ---- */
+.nav-version { margin-top: auto; padding: 12px 10px 4px; font-size: 11px; }
+.days { gap: 12px; }
+.days .check { min-width: 0; }
+.log-view {
+  background: #0b0d12; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+  max-height: 460px; min-height: 160px; overflow: auto; font: 12px/1.5 ui-monospace, Consolas, monospace;
+  white-space: pre-wrap; word-break: break-all; color: #cbd2de; margin: 8px 0 0;
+}
+.about-card { display: flex; gap: 16px; align-items: center; padding: 16px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; }
+.about-logo { font-size: 40px; }
+.about-name { font-size: 20px; font-weight: 600; }
+.update-status { padding: 10px 14px; border-radius: 8px; background: var(--panel); border: 1px solid var(--border); margin-bottom: 8px; }
+.update-status.ok { border-color: #166534; }
+.update-status.available { border-color: var(--accent); background: #1e293b; }
+.update-status.error { border-color: #7f1d1d; color: #fca5a5; }
+.update-notes { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; white-space: pre-wrap; font-size: 13px; max-height: 240px; overflow: auto; }
+ul.links { padding-left: 18px; }
+ul.links a { color: #7dd3fc; }
+
+/* ---- 監控頁：版本、布防按鈕、離線遮罩 ---- */
+.app-version { font-size: 11px; color: var(--muted); margin-right: 6px; }
+button.armed { border-color: #166534; }
+button.disarmed { border-color: #b45309; color: #fbbf24; }
+.offline-cover {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  background: rgba(10, 12, 16, .82); color: #fca5a5; font-weight: 600; z-index: 3; pointer-events: none; text-align: center; padding: 12px;
+}
+.offline-cover small { color: var(--muted); font-weight: normal; max-width: 90%; word-break: break-word; }

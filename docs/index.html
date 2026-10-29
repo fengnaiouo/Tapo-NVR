@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Tapo NVR — TP-Link Tapo 攝影機監控與錄影</title>
-  <meta name="description" content="Tapo NVR：免費開源的 TP-Link Tapo 攝影機監控、錄影、回放與通知軟體。Windows 桌面版與網頁版。">
+  <title>Tapo NVR — Monitoring & recording for TP-Link Tapo cameras</title>
+  <meta name="description" content="Tapo NVR: free, open-source monitoring, recording, playback and motion alerts for TP-Link Tapo cameras. Windows desktop app and web UI.">
   <meta property="og:title" content="Tapo NVR">
   <meta property="og:description" content="Free, open-source NVR for TP-Link Tapo cameras — live view, recording, playback, notifications.">
   <meta property="og:type" content="website">
@@ -636,16 +636,12 @@
         sizeMB: ' · {n} MB',
       },
     };
+    // 預設英文；使用者手動選過語言才改用該語言（也可用 ?lang=zh-TW 等網址參數指定）
     function detect() {
+      const q = new URLSearchParams(location.search).get('lang');
+      if (DICT[q]) return q;
       const saved = localStorage.getItem('lang');
       if (DICT[saved]) return saved;
-      for (const l of navigator.languages || [navigator.language || 'en']) {
-        const n = l.toLowerCase();
-        if (n.startsWith('zh')) return /cn|sg|hans/.test(n) ? 'zh-CN' : 'zh-TW';
-        if (n.startsWith('en')) return 'en';
-        if (n.startsWith('ja')) return 'ja';
-        if (n.startsWith('ko')) return 'ko';
-      }
       return 'en';
     }
     let lang = detect();

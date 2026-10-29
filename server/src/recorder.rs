@@ -416,12 +416,11 @@ struct RetentionJob {
 async fn prepare_job(state: &AppState, root: PathBuf) -> RetentionJob {
     let cfg = state.cfg();
     let mut event_cams = HashMap::new();
+    // 清理只處理最近 2 小時內的片段，往前多取一些涵蓋事件前後保留秒數
+    let to = Utc::now();
+    let from = to - chrono::Duration::hours(3);
     for cam in cfg.cameras.iter().filter(|c| c.record == RecordMode::Events) {
-        let mut ranges = state.events.motion_intervals(&cam.id).await;
-        for ev in state.events.recent(1000, Some(&cam.id)).await {
-            ranges.push((ev.ts, ev.ts));
-        }
-        event_cams.insert(cam.id.clone(), ranges);
+        event_cams.insert(cam.id.clone(), state.events.keep_ranges(&cam.id, from, to));
     }
     RetentionJob {
         root,

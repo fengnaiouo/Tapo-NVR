@@ -22,7 +22,7 @@ use tokio_util::sync::CancellationToken;
 
 const IDENTIFIER: &str = "com.tapo-nvr.desktop";
 /// 預設更新來源：GitHub Releases 最新版的 latest.json（偏好設定可改）
-const DEFAULT_UPDATE_URL: &str = "https://github.com/fengnaiouo/Tapo-NVR/releases/latest/download/latest.json";
+const DEFAULT_UPDATE_URL: &str = tapo_nvr::about::DEFAULT_UPDATE_URL;
 
 use tapo_nvr::tr;
 
@@ -41,6 +41,8 @@ enum Mode {
 struct Prefs {
     mode: Mode,
     server_url: String,
+    /// 遠端伺服器的登入權杖：只保存在記憶體，關閉應用程式後需重新登入
+    #[serde(skip)]
     token: Option<String>,
     notifications: bool,
     update_url: String,
@@ -264,14 +266,8 @@ async fn run_local(app: AppHandle) {
             }
         });
 
-        let target = if server.needs_setup() {
-            format!("{url}/setup.html")
-        } else {
-            match server.issue_ticket().await {
-                Some(t) => format!("{url}/auth/consume?ticket={t}&client=desktop"),
-                None => format!("{url}/"),
-            }
-        };
+        // 每次啟動都要登入（伺服器啟動時已清除所有 Session）
+        let target = if server.needs_setup() { format!("{url}/setup.html") } else { format!("{url}/login.html") };
         navigate(&app, &target);
 
         let code = server.wait().await;
@@ -371,6 +367,8 @@ async fn handle_event(app: &AppHandle, text: &str, source: Source) {
         "motion" => tr!("移動偵測", "Motion detected"),
         "person" => tr!("偵測到人形", "Person detected"),
         "tamper" => tr!("鏡頭遭遮蔽", "Camera tampering"),
+        "offline" => tr!("攝影機離線", "Camera offline"),
+        "online" => tr!("攝影機恢復連線", "Camera back online"),
         other => other.to_string(),
     };
     let camera_name = ev["camera_name"].as_str().map(str::to_string).unwrap_or_else(|| tr!("攝影機", "Camera"));
@@ -457,7 +455,26 @@ fn run_command(app: &AppHandle, cmd: &str) {
         }
         "open-recordings" => open_recordings(app),
         "update-later" => update_later(app),
-        "update-install" => update_install(app),
+        "update-install" => {
+            // 從網頁設定頁按「立即更新」時可能還沒檢查過：先檢查再安裝
+            if app.state::<AppState>().pending_update.lock().unwrap().is_some() {
+                update_install(app);
+            } else {
+                let h = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    if check_update(&h, true).await.is_ok() && h.state::<AppState>().pending_update.lock().unwrap().is_some() {
+                        let app = h.clone();
+                        let _ = h.run_on_main_thread(move || update_install(&app));
+                    }
+                });
+            }
+        }
+        "update-check" => {
+            let h = app.clone();
+            tauri::async_runtime::spawn(async move {
+                let _ = check_update(&h, true).await;
+            });
+        }
         _ => tracing::warn!("未知的桌面指令：{cmd}"),
     }
 }
@@ -580,6 +597,12 @@ async fn find_update(app: &AppHandle) -> Result<Option<tauri_plugin_updater::Upd
 
 /// 背景檢查：同一個版本按過「稍後」就不再提醒（下次啟動或有更新的版本時才會再出現）
 async fn background_update_check(app: &AppHandle) {
+    // 設定 → 更新與關於 →「自動檢查更新」關閉時不檢查
+    if let Ok(cfg) = tapo_nvr::read_config(&server_data_dir(app)) {
+        if !cfg.update.auto_check {
+            return;
+        }
+    }
     match find_update(app).await {
         Ok(Some(update)) => {
             let state = app.state::<AppState>();
@@ -859,6 +882,32 @@ async fn import_config(app: AppHandle) -> Result<String, String> {
     Ok(tr!("已匯入 {} 台攝影機", "Imported {} cameras", n))
 }
 
+/// 忘記管理員密碼：只能從本機應用程式的偏好設定頁呼叫（IPC 不開放給網頁或其他裝置）
+#[tauri::command]
+async fn reset_admin_password(app: AppHandle, username: String, password: String) -> Result<String, String> {
+    let username = username.trim().to_string();
+    if username.is_empty() || username.chars().count() > 32 {
+        return Err(tr!("帳號需為 1–32 字", "Username must be 1–32 characters"));
+    }
+    if password.chars().count() < 8 {
+        return Err(tr!("密碼至少 8 個字元", "Password must be at least 8 characters"));
+    }
+    let hash = tauri::async_runtime::spawn_blocking(move || tapo_nvr::hash_password(&password))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| format!("{e:#}"))?;
+    let u = username.clone();
+    tapo_nvr::modify_config(&server_data_dir(&app), move |c| {
+        c.auth.username = u;
+        c.auth.password_hash = hash;
+    })
+    .map_err(|e| format!("{e:#}"))?;
+    tracing::info!("已從桌面版重設管理員密碼（{username}）");
+    // 重新啟動內建伺服器，清除所有登入並套用新密碼
+    restart_local(&app);
+    Ok(tr!("已重設管理員密碼，請用新密碼登入", "The admin password has been reset. Sign in with the new password."))
+}
+
 /// 連接埠被占用時改用其他位址
 #[tauri::command]
 async fn set_listen(app: AppHandle, listen: String) -> Result<(), String> {
@@ -896,17 +945,21 @@ async fn back_to_app(app: AppHandle) -> Result<(), String> {
 
 fn init_logging(app: &AppHandle) {
     let dir = app.path().app_log_dir().unwrap_or_else(|_| data_dir(app).join("logs"));
+    use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::util::SubscriberInitExt;
     let _ = std::fs::create_dir_all(&dir);
-    let file = std::fs::OpenOptions::new().create(true).append(true).open(dir.join("tapo-nvr.log"));
-    let filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info,tower_http=warn".into());
-    match file {
-        Ok(f) => {
-            let _ = tracing_subscriber::fmt().with_env_filter(filter).with_ansi(false).with_writer(Mutex::new(f)).try_init();
-        }
-        Err(_) => {
-            let _ = tracing_subscriber::fmt().with_env_filter(filter).try_init();
-        }
+    let path = dir.join("tapo-nvr.log");
+    // 超過 5 MB 時改名為 .old.log（只保留一份舊檔），避免記錄檔無限增長
+    if std::fs::metadata(&path).is_ok_and(|m| m.len() > 5 * 1024 * 1024) {
+        let _ = std::fs::rename(&path, dir.join("tapo-nvr.old.log"));
     }
+    let file = std::fs::OpenOptions::new().create(true).append(true).open(&path);
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info,tower_http=warn".into());
+    let registry = tracing_subscriber::registry().with(filter).with(tapo_nvr::log_layer());
+    let _ = match file {
+        Ok(f) => registry.with(tracing_subscriber::fmt::layer().with_ansi(false).with_writer(Mutex::new(f))).try_init(),
+        Err(_) => registry.with(tracing_subscriber::fmt::layer()).try_init(),
+    };
 }
 
 fn build_tray(app: &AppHandle, notifications: bool) -> tauri::Result<()> {
@@ -1005,6 +1058,7 @@ fn main() {
             retry,
             import_config,
             set_listen,
+            reset_admin_password,
             check_update_cmd,
             open_data_dir,
             back_to_app

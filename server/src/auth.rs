@@ -127,9 +127,16 @@ fn is_https(state: &AppState, headers: &HeaderMap) -> bool {
             .is_some_and(|v| v.eq_ignore_ascii_case("https"))
 }
 
-fn session_cookie(state: &AppState, headers: &HeaderMap, token: &str, max_age: i64) -> String {
+/// 登入用的工作階段 Cookie：不設 Max-Age，關閉瀏覽器（或桌面版）後就會消失，需重新登入。
+/// 伺服器端另有 session_days 上限，且伺服器每次啟動都會清除所有 Session。
+fn session_cookie(state: &AppState, headers: &HeaderMap, token: &str) -> String {
     let secure = if is_https(state, headers) { "; Secure" } else { "" };
-    format!("{COOKIE_NAME}={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={max_age}{secure}")
+    format!("{COOKIE_NAME}={token}; Path=/; HttpOnly; SameSite=Lax{secure}")
+}
+
+fn clear_cookie(state: &AppState, headers: &HeaderMap) -> String {
+    let secure = if is_https(state, headers) { "; Secure" } else { "" };
+    format!("{COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0{secure}")
 }
 
 fn token_from(headers: &HeaderMap) -> Option<String> {
@@ -243,7 +250,7 @@ pub async fn login(
     let (token, expires) = state.auth.create(&body.username, days).await;
     tracing::info!("登入成功：{ip}");
     (
-        [(header::SET_COOKIE, session_cookie(&state, &headers, &token, days * 86400))],
+        [(header::SET_COOKIE, session_cookie(&state, &headers, &token))],
         Json(json!({"token": token, "username": body.username, "expires": expires})),
     )
         .into_response()
@@ -256,7 +263,7 @@ pub async fn logout(
 ) -> Response {
     state.auth.revoke(&user.token).await;
     (
-        [(header::SET_COOKIE, session_cookie(&state, &headers, "", 0))],
+        [(header::SET_COOKIE, clear_cookie(&state, &headers))],
         Json(json!({"ok": true})),
     )
         .into_response()
@@ -296,9 +303,8 @@ pub async fn consume_ticket(
             if state.auth.validate(&token).await.is_none() {
                 return Redirect::to("/login.html").into_response();
             }
-            let max_age = state.cfg().auth.session_days * 86400;
             (
-                [(header::SET_COOKIE, session_cookie(&state, &headers, &token, max_age))],
+                [(header::SET_COOKIE, session_cookie(&state, &headers, &token))],
                 Redirect::to(if q.client.as_deref() == Some("desktop") { "/?client=desktop" } else { "/" }),
             )
                 .into_response()
@@ -379,7 +385,7 @@ pub async fn setup(
     let days = state.cfg().auth.session_days;
     let (token, expires) = state.auth.create(&username, days).await;
     (
-        [(header::SET_COOKIE, session_cookie(&state, &headers, &token, days * 86400))],
+        [(header::SET_COOKIE, session_cookie(&state, &headers, &token))],
         Json(json!({"token": token, "username": username, "expires": expires})),
     )
         .into_response()

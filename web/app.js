@@ -1,5 +1,5 @@
 const $ = (s) => document.querySelector(s);
-const KIND_KEYS = {motion: '移動偵測', person: '偵測到人形', tamper: '鏡頭遭遮蔽'};
+const KIND_KEYS = {motion: '移動偵測', person: '偵測到人形', tamper: '鏡頭遭遮蔽', offline: '攝影機離線', online: '攝影機恢復連線'};
 const kindLabel = (k) => t(KIND_KEYS[k] || k);
 
 const state = {
@@ -66,6 +66,10 @@ function renderGrid() {
       <div class="privacy-cover" hidden>
         <div>🔒 隱私模式已開啟</div>
         <button data-act="privacy-off">關閉隱私模式</button>
+      </div>
+      <div class="offline-cover" hidden>
+        <div>⚠️ 攝影機離線</div>
+        <small class="offline-detail" data-no-i18n></small>
       </div>
       <div class="tile-top">
         <span class="badge" hidden></span>
@@ -209,8 +213,16 @@ function applyStatus(id, status) {
   const tile = state.tiles.get(id);
   if (!tile || !status) return;
   const dot = tile.querySelector('.dot');
-  dot.className = 'dot ' + (status.online === true ? 'on' : status.online === false ? 'off' : '');
-  dot.title = status.error || (status.online ? t('事件連線正常') : '');
+  // 連線監控（reachable）優先；沒有結果時才用 ONVIF 事件訂閱狀態
+  const offline = status.reachable === false;
+  const online = status.reachable === true ? status.online !== false : status.online;
+  dot.className = 'dot ' + (offline ? 'off' : online === true ? 'on' : online === false ? 'off' : '');
+  dot.title = offline
+    ? t('攝影機離線：{e}', {e: status.reach_error || ''})
+    : status.error ? t('移動偵測連線異常：{e}', {e: status.error}) : online ? t('連線正常') : '';
+  tile.classList.toggle('offline', offline);
+  tile.querySelector('.offline-cover').hidden = !offline;
+  tile.querySelector('.offline-detail').textContent = offline ? status.reach_error || '' : '';
   const badge = tile.querySelector('.badge');
   const active = status.active || [];
   badge.hidden = active.length === 0;
@@ -601,6 +613,7 @@ function connectEvents(delay = 1000) {
       onNewEvent(msg.event);
     } else if (msg.type === 'config') {
       reloadCameras();
+      loadArmState();
     } else if (msg.type === 'device') {
       state.device[msg.camera] = msg.device;
       applyDevice(msg.camera);
@@ -650,6 +663,50 @@ async function reloadCameras() {
     if (cam) openFocus(cam); else closeFocus();
   }
   renderGrid();
+}
+
+// ---------- 布防 / 撤防、版本 ----------
+let armed = null;
+function renderArm() {
+  const b = $('#btn-arm');
+  b.hidden = armed == null;
+  b.textContent = armed ? t('🛡 已布防') : t('🔕 已撤防');
+  b.classList.toggle('armed', !!armed);
+  b.classList.toggle('disarmed', armed === false);
+  b.title = armed
+    ? t('通知開啟中，按一下撤防（暫停所有通知，仍會錄影與記錄事件）')
+    : t('通知已暫停，按一下布防（恢復通知）');
+}
+async function loadArmState() {
+  try {
+    const s = await api('/api/settings');
+    armed = s.notify.enabled;
+    renderArm();
+  } catch { /* 忽略 */ }
+}
+async function toggleArm() {
+  const next = !armed;
+  try {
+    await api('/api/notify/armed', {method: 'PUT', body: JSON.stringify({armed: next})});
+    armed = next;
+    renderArm();
+    toast(next ? t('已布防，恢復通知') : t('已撤防，暫停通知（仍會錄影與記錄事件）'));
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+async function loadVersion() {
+  try {
+    const a = await api('/api/about');
+    const el = $('#app-version');
+    el.textContent = `v${a.version}`;
+    el.title = a.update_available ? t('有新版本 v{v}，請到設定 → 更新與關於', {v: a.update.latest}) : 'Tapo NVR';
+    if (a.update_available) {
+      el.textContent += ' ⬆';
+      el.style.cursor = 'pointer';
+      el.onclick = () => location.href = '/settings.html#about';
+    }
+  } catch { /* 忽略 */ }
 }
 
 // ---------- 初始化 ----------
@@ -722,6 +779,10 @@ async function main() {
       toast(t('儲存失敗：{e}', {e: err.message}), 'error');
     }
   };
+
+  $('#btn-arm').onclick = toggleArm;
+  loadArmState();
+  loadVersion();
 
   initZoom();
   initPtz();

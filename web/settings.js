@@ -37,8 +37,13 @@ window.addEventListener('hashchange', showTab);
 async function load() {
   settings = await api('/api/settings');
   renderCameras();
-  fillForm($('#form-notify'), {...settings.notify, ntfy_token: ''});
+  fillForm($('#form-notify'), {...settings.notify, ntfy_token: '', clear_ntfy_token: false});
   $('#form-notify').elements.ntfy_token.placeholder = settings.notify.has_ntfy_token ? t('已設定（不變更請留空）') : t('選填');
+  $('#clear-ntfy-wrap').hidden = !settings.notify.has_ntfy_token;
+  document.querySelectorAll('#schedule-days input').forEach((el) => {
+    el.checked = settings.notify.schedule_days.includes(Number(el.dataset.day));
+  });
+  syncSchedule();
   fillForm($('#form-recording'), settings.recording);
   loadRecordingStatus();
   fillForm($('#form-account'), {username: settings.account.username});
@@ -419,11 +424,26 @@ function syncStreamFields() {
 $('#form-camera').elements.stream.addEventListener('change', syncStreamFields);
 
 // ---------- 其他表單 ----------
+function syncSchedule() {
+  const f = $('#form-notify');
+  const on = f.elements.schedule_enabled.checked;
+  for (const el of [f.elements.schedule_start, f.elements.schedule_end, ...document.querySelectorAll('#schedule-days input')]) {
+    el.disabled = !on;
+  }
+  $('#schedule-now').textContent = on && settings
+    ? ' ' + t(settings.notify.in_schedule ? '（目前在通知時段內）' : '（目前不在通知時段內）')
+    : '';
+}
+$('#form-notify').elements.schedule_enabled.addEventListener('change', syncSchedule);
+
 $('#form-notify').addEventListener('submit', async (e) => {
   e.preventDefault();
+  const v = formValues(e.target);
+  v.schedule_days = [...document.querySelectorAll('#schedule-days input')].filter((el) => el.checked).map((el) => Number(el.dataset.day));
   try {
-    await send('PUT', '/api/settings/notify', formValues(e.target));
+    await send('PUT', '/api/settings/notify', v);
     toast('已儲存');
+    load();
   } catch (err) {
     toast(err.message, 'error');
   }
@@ -509,9 +529,141 @@ if (localStorage.getItem('client') === 'desktop') {
   $('#btn-browser-notify').parentElement.hidden = true;
 }
 
+// ---------- 系統與記錄 ----------
+$('#btn-restore').onclick = () => $('#restore-file').click();
+$('#restore-file').onchange = async (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  let body;
+  try {
+    body = JSON.parse(await file.text());
+  } catch {
+    return toast('檔案不是有效的 JSON', 'error');
+  }
+  const n = body?.config?.cameras?.length ?? 0;
+  if (!confirm(t('要用這份備份取代目前的攝影機、錄影、通知與伺服器設定嗎？（{n} 台攝影機；管理員帳密不變）', {n}))) return;
+  try {
+    const r = await send('POST', '/api/settings/restore', body);
+    toast(t('已還原設定（{n} 台攝影機）', {n: r.cameras}));
+    load();
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+};
+
+let logTimer = null;
+async function loadLogs() {
+  const level = $('#log-level').value;
+  try {
+    const r = await api(`/api/system/logs?limit=500${level ? `&level=${level}` : ''}`);
+    const view = $('#log-view');
+    const atBottom = view.scrollTop + view.clientHeight >= view.scrollHeight - 20;
+    view.textContent = r.lines.length
+      ? r.lines.map((l) => `${l.ts}  ${l.level.padEnd(5)}  ${l.message}`).join('\n')
+      : t('（沒有記錄）');
+    if (atBottom) view.scrollTop = view.scrollHeight;
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+$('#btn-log-refresh').onclick = loadLogs;
+$('#log-level').onchange = loadLogs;
+$('#log-auto').onchange = (e) => {
+  clearInterval(logTimer);
+  if (e.target.checked) logTimer = setInterval(loadLogs, 3000);
+};
+$('#btn-log-copy').onclick = async () => {
+  try {
+    await navigator.clipboard.writeText($('#log-view').textContent);
+    toast('已複製');
+  } catch {
+    toast('無法複製，請手動選取', 'error');
+  }
+};
+
+// ---------- 更新與關於 ----------
+const isDesktopClient = localStorage.getItem('client') === 'desktop';
+function desktopCommand(cmd) {
+  location.href = `https://tapo-app.invalid/cmd/${cmd}`;
+}
+
+function renderAbout(a) {
+  $('#nav-version').textContent = `Tapo NVR v${a.version}`;
+  $('#about-version').textContent = `v${a.version}`;
+  $('#about-kind').textContent = t(a.desktop ? '（桌面版）' : '（伺服器版）');
+  $('#auto-check').checked = a.auto_check;
+  for (const [id, url] of [['#link-home', a.homepage_url], ['#link-repo', a.repo_url], ['#link-releases', a.releases_url]]) {
+    $(id).href = url;
+  }
+  const u = a.update || {};
+  const status = $('#update-status');
+  const checked = u.checked_at ? new Date(u.checked_at).toLocaleString() : null;
+  status.className = 'update-status';
+  if (u.error) {
+    status.textContent = u.error;
+    status.classList.add('error');
+  } else if (a.update_available) {
+    status.textContent = t('🎉 有新版本 v{v} 可以更新', {v: u.latest});
+    status.classList.add('available');
+  } else if (u.latest) {
+    status.textContent = t('✅ 目前已是最新版本');
+    status.classList.add('ok');
+  } else {
+    status.textContent = t('尚未檢查更新');
+  }
+  if (checked) status.textContent += ' · ' + t('上次檢查：{t}', {t: checked});
+  $('#update-notes').hidden = !(a.update_available && u.notes);
+  $('#update-notes').textContent = u.notes || '';
+  // 桌面版：一鍵下載安裝；瀏覽器 / 獨立伺服器：前往下載頁
+  $('#btn-install-update').hidden = !(a.update_available && a.desktop && isDesktopClient);
+  $('#btn-download-update').hidden = !(a.update_available && !(a.desktop && isDesktopClient));
+  $('#btn-download-update').href = a.releases_url;
+  $('#update-hint').textContent = a.desktop
+    ? t(isDesktopClient
+      ? '按「立即更新」會下載並安裝新版，完成後應用程式自動重新啟動；設定與錄影都會保留。'
+      : '桌面版的更新請在執行 Tapo NVR 的電腦上操作（應用程式右下角也會出現更新提示）。')
+    : t('伺服器版請下載新版後替換執行檔，或使用 git pull 後重新編譯。');
+}
+
+async function loadAbout() {
+  try {
+    renderAbout(await api('/api/about'));
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+$('#btn-check-update').onclick = async (e) => {
+  e.target.disabled = true;
+  try {
+    renderAbout(await send('POST', '/api/about/check'));
+  } catch (err) {
+    toast(err.message, 'error');
+  } finally {
+    e.target.disabled = false;
+  }
+};
+$('#btn-install-update').onclick = () => desktopCommand('update-install');
+$('#auto-check').onchange = async (e) => {
+  try {
+    await send('PUT', '/api/settings/update', {auto_check: e.target.checked});
+    toast('已儲存');
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+};
+
+// 切到需要即時資料的分頁時才載入
+window.addEventListener('hashchange', () => {
+  if (location.hash === '#system') loadLogs();
+  if (location.hash === '#about') loadAbout();
+});
+
 // ---------- 啟動 ----------
 i18n.ready.then(() => {
   showTab();
   updateNotifyState();
   load().catch((e) => toast(e.message, 'error'));
+  loadAbout();
+  if (location.hash === '#system') loadLogs();
 });
