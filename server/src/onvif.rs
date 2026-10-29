@@ -50,8 +50,12 @@ pub struct OnvifClient {
 }
 
 pub struct Subscription {
-    address: String,
+    pub address: String,
 }
+
+/// PullMessages 的等待秒數。Tapo 攝影機約 10 秒就會主動關閉連線（實測 C210 韌體 1.2.7：
+/// 20 秒時每次在 10.7 秒被斷線、8 秒以下正常），所以用 5 秒並保留餘裕
+pub const PULL_WAIT_SECS: u64 = 5;
 
 impl OnvifClient {
     pub fn new(host: &str, port: u16, username: &str, password: &str) -> Self {
@@ -329,14 +333,19 @@ impl OnvifClient {
     }
 
     pub async fn pull(&self, sub: &Subscription) -> Result<Vec<OnvifEvent>> {
+        self.pull_wait(sub, PULL_WAIT_SECS).await
+    }
+
+    /// 長輪詢：攝影機最多等 wait 秒，有事件就立刻回應
+    pub async fn pull_wait(&self, sub: &Subscription, wait: u64) -> Result<Vec<OnvifEvent>> {
         let xml = self
             .call(
                 &sub.address,
                 "http://www.onvif.org/ver10/events/wsdl/PullPointSubscription/PullMessagesRequest",
-                "<tev:PullMessages><tev:Timeout>PT20S</tev:Timeout><tev:MessageLimit>32</tev:MessageLimit></tev:PullMessages>",
+                &format!("<tev:PullMessages><tev:Timeout>PT{wait}S</tev:Timeout><tev:MessageLimit>32</tev:MessageLimit></tev:PullMessages>"),
                 true,
                 true,
-                Duration::from_secs(35),
+                Duration::from_secs(wait + 15),
             )
             .await?;
         let doc = roxmltree::Document::parse(&xml)?;

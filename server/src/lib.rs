@@ -12,7 +12,7 @@ mod go2rtc;
 mod health;
 pub mod logbuf;
 mod notify;
-mod onvif;
+pub mod onvif;
 mod recorder;
 mod recordings;
 mod secret;

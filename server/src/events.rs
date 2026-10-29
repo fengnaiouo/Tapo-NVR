@@ -233,7 +233,7 @@ pub async fn watch_camera(
                 loop {
                     if renewed.elapsed() > Duration::from_secs(240) {
                         if let Err(e) = client.renew(&sub).await {
-                            tracing::warn!("[{}] 續訂失敗：{e}", cam.id);
+                            tracing::warn!("[{}] 續訂失敗：{e:#}", cam.id);
                             break;
                         }
                         renewed = Instant::now();
@@ -245,7 +245,7 @@ pub async fn watch_camera(
                     let msgs = match pulled {
                         Ok(m) => m,
                         Err(e) => {
-                            tracing::warn!("[{}] 拉取事件失敗：{e}", cam.id);
+                            tracing::warn!("[{}] 拉取事件失敗：{e:#}", cam.id);
                             break;
                         }
                     };
@@ -285,11 +285,11 @@ pub async fn watch_camera(
                 client.unsubscribe(&sub).await;
             }
             Err(e) => {
-                tracing::warn!("[{}] 無法訂閱事件：{e}", cam.id);
+                tracing::warn!("[{}] 無法訂閱事件：{e:#}", cam.id);
                 hub.update_status(&cam.id, |s| {
                     s.online = Some(false);
                     s.active.clear();
-                    s.error = Some(e.to_string());
+                    s.error = Some(format!("{e:#}"));
                 })
                 .await;
                 hub.mark_motion(&cam.id, false).await;
